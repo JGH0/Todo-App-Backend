@@ -62,6 +62,23 @@ class TodoController extends BaseController
         ];
 
         $this->todoModel->insert($data);
+        
+        // Manually log the activity
+        try {
+            $activityLogModel = new \App\Models\ActivityLogModel();
+            $activityLogModel->logActivity([
+                'user_id' => $userId,
+                'action' => 'todo_created',
+                'entity_type' => 'todo',
+                'entity_id' => $data['id'],
+                'details' => json_encode(['action' => 'created', 'title' => $data['title']]),
+                'ip_address' => $this->request->getIPAddress(),
+                'user_agent' => $this->request->getUserAgent()->getAgentString(),
+            ]);
+        } catch (\Exception $e) {
+            log_message('error', 'Failed to log activity: ' . $e->getMessage());
+        }
+        
         $todo = $this->todoModel->getByUserWithCategories($userId, $data['id']);
 
         return $this->successResponse($todo, 'Todo created successfully', 201);
@@ -105,6 +122,23 @@ class TodoController extends BaseController
         }
 
         $this->todoModel->update($id, $updateData);
+        
+        // Manually log the activity
+        try {
+            $activityLogModel = new \App\Models\ActivityLogModel();
+            $activityLogModel->logActivity([
+                'user_id' => $userId,
+                'action' => 'todo_updated',
+                'entity_type' => 'todo',
+                'entity_id' => $id,
+                'details' => json_encode(['action' => 'updated', 'title' => $todo['title'] ?? 'Unknown']),
+                'ip_address' => $this->request->getIPAddress(),
+                'user_agent' => $this->request->getUserAgent()->getAgentString(),
+            ]);
+        } catch (\Exception $e) {
+            log_message('error', 'Failed to log activity: ' . $e->getMessage());
+        }
+        
         $todo = $this->todoModel->getByUserWithCategories($userId, $id);
 
         return $this->successResponse($todo, 'Todo updated successfully');
@@ -124,6 +158,22 @@ class TodoController extends BaseController
         }
 
         $this->todoModel->delete($id);
+        
+        // Manually log the activity
+        try {
+            $activityLogModel = new \App\Models\ActivityLogModel();
+            $activityLogModel->logActivity([
+                'user_id' => $userId,
+                'action' => 'todo_deleted',
+                'entity_type' => 'todo',
+                'entity_id' => $id,
+                'details' => json_encode(['action' => 'deleted', 'title' => $todo['title'] ?? 'Unknown']),
+                'ip_address' => $this->request->getIPAddress(),
+                'user_agent' => $this->request->getUserAgent()->getAgentString(),
+            ]);
+        } catch (\Exception $e) {
+            log_message('error', 'Failed to log activity: ' . $e->getMessage());
+        }
 
         return $this->successResponse(null, 'Todo deleted successfully');
     }

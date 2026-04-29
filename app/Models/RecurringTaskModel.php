@@ -6,8 +6,6 @@ use CodeIgniter\Model;
 
 class RecurringTaskModel extends Model
 {
-    use LoggableTrait;
-
     protected $table = 'recurring_tasks';
     protected $primaryKey = 'id';
     protected $useAutoIncrement = false;
@@ -34,11 +32,6 @@ class RecurringTaskModel extends Model
         'title' => 'required|max_length[255]',
         'schedule' => 'required|in_list[daily,weekly,monthly,custom]',
     ];
-
-    protected function getEntityType(): string
-    {
-        return 'recurring_task';
-    }
 
     // Get recurring tasks with categories
     public function getWithCategories($taskId = null)

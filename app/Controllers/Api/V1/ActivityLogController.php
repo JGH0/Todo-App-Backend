@@ -21,7 +21,7 @@ class ActivityLogController extends BaseController
     public function index()
     {
         $userId = $this->getUserId();
-        $limit = $this->request->getVar('limit') ?? 50;
+        $limit = (int)($this->request->getVar('limit') ?? 50);
         $logs = $this->activityLogModel->getByUser($userId, $limit);
 
         return $this->successResponse($logs, 'Activity logs retrieved successfully');

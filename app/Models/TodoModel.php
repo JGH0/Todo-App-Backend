@@ -6,8 +6,6 @@ use CodeIgniter\Model;
 
 class TodoModel extends Model
 {
-    use LoggableTrait;
-
     protected $table = 'todos';
     protected $primaryKey = 'id';
     protected $useAutoIncrement = false;
@@ -38,11 +36,6 @@ class TodoModel extends Model
         'title' => 'required|max_length[255]',
         'status' => 'permit_empty|in_list[open,in_progress,completed,archived]',
     ];
-
-    protected function getEntityType(): string
-    {
-        return 'todo';
-    }
 
     // Get todos with categories
     public function getWithCategories($todoId = null)

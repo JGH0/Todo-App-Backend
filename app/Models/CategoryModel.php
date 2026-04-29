@@ -6,8 +6,6 @@ use CodeIgniter\Model;
 
 class CategoryModel extends Model
 {
-    use LoggableTrait;
-
     protected $table = 'categories';
     protected $primaryKey = 'id';
     protected $useAutoIncrement = false;
@@ -30,9 +28,4 @@ class CategoryModel extends Model
         'user_id' => 'required',
         'name' => 'required|max_length[255]',
     ];
-
-    protected function getEntityType(): string
-    {
-        return 'category';
-    }
 }

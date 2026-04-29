@@ -6,8 +6,6 @@ use CodeIgniter\Model;
 
 class ProjectModel extends Model
 {
-    use LoggableTrait;
-
     protected $table = 'projects';
     protected $primaryKey = 'id';
     protected $useAutoIncrement = false;
@@ -30,9 +28,4 @@ class ProjectModel extends Model
         'user_id' => 'required',
         'name' => 'required|max_length[255]',
     ];
-
-    protected function getEntityType(): string
-    {
-        return 'project';
-    }
 }
