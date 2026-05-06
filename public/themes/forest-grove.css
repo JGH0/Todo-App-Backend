@@ -1,0 +1,16 @@
+/* Forest Grove Theme — NaturePalette v1.0.5 */
+:root {
+  --color-primary:    #2D6A4F;
+  --color-secondary:  #52B788;
+  --color-background: #F0F7EE;
+  --color-surface:    #FFFFFF;
+  --color-text:       #1B2E22;
+  --color-accent:     #B7E4C7;
+}
+
+body { background-color: var(--color-background); color: var(--color-text); font-family: system-ui, sans-serif; }
+a, .link { color: var(--color-primary); }
+.btn-primary { background: var(--color-primary); color: #fff; border: none; border-radius: 6px; padding: 8px 18px; cursor: pointer; }
+.btn-primary:hover { background: var(--color-secondary); }
+.card { background: var(--color-surface); border-radius: 10px; box-shadow: 0 2px 8px rgba(45,106,79,0.12); padding: 20px; }
+.tag { background: var(--color-accent); color: var(--color-text); border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; }

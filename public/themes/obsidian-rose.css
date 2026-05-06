@@ -1,0 +1,16 @@
+/* Obsidian Rose Theme — ChromaCraft v1.3.0 */
+:root {
+  --color-primary:    #C9184A;
+  --color-secondary:  #FF4D6D;
+  --color-background: #0A0A0F;
+  --color-surface:    #1C1C28;
+  --color-text:       #F1E3E4;
+  --color-accent:     #B5838D;
+}
+
+body { background-color: var(--color-background); color: var(--color-text); font-family: system-ui, sans-serif; }
+a, .link { color: var(--color-secondary); }
+.btn-primary { background: var(--color-primary); color: #fff; border: none; border-radius: 6px; padding: 8px 18px; cursor: pointer; }
+.btn-primary:hover { background: var(--color-secondary); }
+.card { background: var(--color-surface); border-radius: 10px; box-shadow: 0 2px 16px rgba(201,24,74,0.2); padding: 20px; }
+.tag { background: var(--color-accent); color: #0A0A0F; border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; }
