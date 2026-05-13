@@ -126,3 +126,5 @@ _modules/*
 /phpunit*.xml
 .env
 env
+.claude/
+.claude/*

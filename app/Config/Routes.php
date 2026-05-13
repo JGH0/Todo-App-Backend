@@ -6,6 +6,9 @@ use CodeIgniter\Router\RouteCollection;
  * @var RouteCollection $routes
  */
 $routes->get('/', 'Home::index');
+$routes->get('/themes', 'ThemeStore::index');
+$routes->post('/themes/upload', 'ThemeStore::upload');
+$routes->get('/themes/preview/(:segment)', 'ThemeStore::preview/$1');
 
 // ============================================================================
 // API Routes - Version 1.0
@@ -91,3 +94,20 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => [
     $routes->put('user/themes/(:segment)', 'UserThemeController::update/$1');
     $routes->delete('user/themes/(:segment)', 'UserThemeController::delete/$1');
 });
+$routes->get('/themes', 'ThemeStore::index');
+$routes->options('/themes', static function () {
+    header('Access-Control-Allow-Origin: http://localhost:5173');
+    header('Access-Control-Allow-Methods: GET, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, Accept, Fetch');
+    header('Access-Control-Allow-Credentials: true');
+    return response()->setStatusCode(204);
+});
+$routes->post('/themes/upload', 'ThemeStore::upload');
+$routes->options('/themes/upload', static function () {
+    header('Access-Control-Allow-Origin: http://localhost:5173');
+    header('Access-Control-Allow-Methods: POST, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, Accept, Fetch');
+    header('Access-Control-Allow-Credentials: true');
+    return response()->setStatusCode(204);
+});
+$routes->get('/themes/preview/(:segment)', 'ThemeStore::preview/$1');

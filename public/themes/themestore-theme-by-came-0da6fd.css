@@ -1,0 +1,37 @@
+/* @todo-theme-meta
+{
+  "name": "THemestore theme by Came",
+  "id": "custom-1778674717129",
+  "group": "Custom",
+  "preview": [
+    "#17acde",
+    "#222020",
+    "#00bbff"
+  ],
+  "hasWallpaper": false
+}
+*/
+
+:root {
+  --bg: #17acde;
+  --surface: #222020;
+  --surface-strong: #2bc582;
+  --surface-muted: #38363a;
+  --border: #000000;
+  --line: #ffffff;
+  --text: #d12e57;
+  --text-muted: #2f84c1;
+  --text-strong: #ff0000;
+  --accent: #00bbff;
+  --accent-text: #570000;
+  --accent-soft: #005f85;
+  --sidebar-bg: #004370;
+  --sidebar-border: #2a5070;
+  --sidebar-text: #d8f0ff;
+  --sidebar-text-muted: #7ab0d0;
+  --input-bg: #ffffff;
+  --input-border: #a0cce0;
+  --modal-bg: #ffffff;
+  --chip: #b0d8ec;
+  --success: #d0f0e0;
+}
