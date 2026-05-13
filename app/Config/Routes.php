@@ -11,6 +11,15 @@ $routes->get('/', 'Home::index');
 // API Routes - Version 1.0
 // ============================================================================
 
+// Catch-all CORS preflight handler for all API routes
+$routes->options('api/v1/(:any)', function () {
+    $response = service('response');
+    return $response->setStatusCode(200)
+        ->setHeader('Access-Control-Allow-Origin', '*')
+        ->setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        ->setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+});
+
 // Public endpoints (no authentication required)
 $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => 'cors'], function ($routes) {
     // Authentication

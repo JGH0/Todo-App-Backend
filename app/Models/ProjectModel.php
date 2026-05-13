@@ -22,7 +22,7 @@ class ProjectModel extends Model
 
     protected $useTimestamps = true;
     protected $createdField = 'created_at';
-    protected $updatedField = null;
+    protected $updatedField = '';
 
     protected $validationRules = [
         'user_id' => 'required',

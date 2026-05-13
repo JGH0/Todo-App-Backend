@@ -22,7 +22,7 @@ class AiProviderModel extends Model
 
     protected $useTimestamps = true;
     protected $createdField = 'created_at';
-    protected $updatedField = null;
+    protected $updatedField = '';
 
     protected $validationRules = [
         'name' => 'required|max_length[100]|is_unique[ai_providers.name]',
