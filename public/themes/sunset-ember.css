@@ -1,0 +1,16 @@
+/* Sunset Ember Theme — ChromaCraft v1.1.2 */
+:root {
+  --color-primary:    #D62828;
+  --color-secondary:  #F77F00;
+  --color-background: #FFF5E4;
+  --color-surface:    #FFFFFF;
+  --color-text:       #2D1B00;
+  --color-accent:     #FCBF49;
+}
+
+body { background-color: var(--color-background); color: var(--color-text); font-family: system-ui, sans-serif; }
+a, .link { color: var(--color-primary); }
+.btn-primary { background: var(--color-secondary); color: #fff; border: none; border-radius: 6px; padding: 8px 18px; cursor: pointer; }
+.btn-primary:hover { background: var(--color-primary); }
+.card { background: var(--color-surface); border-radius: 10px; box-shadow: 0 2px 8px rgba(214,40,40,0.1); padding: 20px; }
+.tag { background: var(--color-accent); color: var(--color-text); border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; }
