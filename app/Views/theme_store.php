@@ -164,7 +164,7 @@
     }
     .btn:hover { opacity: 0.88; transform: translateY(-1px); }
     .btn-download {
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      background: linear-gradient(135deg, #22c55e, #16a34a);
       color: #fff; text-decoration: none;
       display: flex; align-items: center; justify-content: center; gap: 6px;
     }
@@ -292,7 +292,7 @@
     .modal-actions { display: flex; gap: 10px; }
     .btn-download-lg {
       flex: 1; padding: 13px; font-size: 0.95rem; border-radius: 10px;
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      background: linear-gradient(135deg, #22c55e, #16a34a);
       color: #fff; font-weight: 700; text-decoration: none;
       display: flex; align-items: center; justify-content: center; gap: 8px;
       border: none; cursor: pointer;
@@ -510,21 +510,31 @@
           <?php endforeach; ?>
         </div>
         <div class="card-actions">
-          <a class="btn btn-download" href="<?= esc($theme['download_url']) ?>" download>
-            &#8659; Download
-          </a>
+          <button class="btn btn-download" onclick="installTheme(<?= htmlspecialchars(json_encode([
+            'id'           => $theme['id'],
+            'display_name' => $theme['display_name'],
+            'description'  => $theme['description'],
+            'author'       => $theme['author'],
+            'version'      => $theme['version'],
+            'download_url' => $theme['download_url'],
+            'colors'       => $theme['colors'],
+            'tags'         => $theme['tags'],
+            'vars'         => $theme['vars'],
+          ]), ENT_QUOTES, 'UTF-8') ?>)">
+            &#8659; Install Theme
+          </button>
           <button class="btn btn-details"
-            onclick='openDetailsModal(<?= json_encode([
-              "id"           => $theme["id"],
-              "display_name" => $theme["display_name"],
-              "description"  => $theme["description"],
-              "author"       => $theme["author"],
-              "version"      => $theme["version"],
-              "download_url" => $theme["download_url"],
-              "colors"       => $theme["colors"],
-              "tags"         => $theme["tags"],
-              "vars"         => $theme["vars"],
-            ]) ?>)'>
+            onclick="openDetailsModal(<?= htmlspecialchars(json_encode([
+              'id'           => $theme['id'],
+              'display_name' => $theme['display_name'],
+              'description'  => $theme['description'],
+              'author'       => $theme['author'],
+              'version'      => $theme['version'],
+              'download_url' => $theme['download_url'],
+              'colors'       => $theme['colors'],
+              'tags'         => $theme['tags'],
+              'vars'         => $theme['vars'],
+            ]), ENT_QUOTES, 'UTF-8') ?>)">
             Details
           </button>
         </div>
@@ -570,9 +580,9 @@
           <div class="modal-tags" id="dm-tags"></div>
 
           <div class="modal-actions">
-            <a class="btn-download-lg" id="dm-download" href="#" download>
-              &#8659; Download Theme
-            </a>
+            <button class="btn-download-lg" id="dm-download" onclick="installCurrentTheme()">
+              &#8659; Install Theme
+            </button>
           </div>
         </div>
       </div>
@@ -608,7 +618,7 @@
       <button class="modal-close" onclick="closeUploadModal()">&#x2715;</button>
     </div>
     <div class="upload-body">
-      <form method="post" action="/themes/upload" enctype="multipart/form-data">
+      <form method="post" action="<?= site_url('themes/upload') ?>" enctype="multipart/form-data">
 
         <div class="field">
           <label>Display Name *</label>
@@ -643,12 +653,93 @@
 <script>
   let currentThemeId   = null;
   let currentThemeVars = {};
+  let currentThemeData = null;
   let previewLoaded    = false;
+
+  /* ── Theme Installation ── */
+  function installTheme(theme) {
+    // Convert theme data to match Todo-App format
+    const themeData = {
+      name: theme.display_name,
+      description: theme.description,
+      preview: Object.values(theme.colors || {}).length ? Object.values(theme.colors) : ['#ffffff', '#f0f0f0', '#007acc'],
+      vars: theme.vars || {},
+      source: 'theme-store'
+    };
+    
+    console.log('Installing theme:', themeData);
+    
+    // Send install message to parent Todo-App
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({
+        type: 'THEME_DOWNLOAD_REQUEST',
+        data: themeData
+      }, '*');
+      
+      // Show success feedback
+      showInstallFeedback(theme.display_name);
+    } else {
+      // Fallback: redirect to the frontend with the theme data
+      const installUrl = "http://localhost:5173/#theme-install:" + encodeURIComponent(JSON.stringify(themeData));
+      window.location.href = installUrl;
+    }
+  }
+  
+  function installCurrentTheme() {
+    if (currentThemeData) {
+      installTheme(currentThemeData);
+    }
+  }
+  
+  function showInstallFeedback(themeName) {
+    // Create a temporary success message
+    const feedback = document.createElement('div');
+    feedback.className = 'install-feedback';
+    feedback.innerHTML = `✅ "${themeName}" is being installed...`;
+    feedback.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      z-index: 10000;
+      box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+      animation: slideIn 0.3s ease-out;
+    `;
+    
+    document.body.appendChild(feedback);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+      feedback.style.animation = 'slideOut 0.3s ease-out';
+      setTimeout(() => {
+        document.body.removeChild(feedback);
+      }, 300);
+    }, 3000);
+  }
+  
+  // Add animations
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(100%); opacity: 0; }
+    }
+  `;
+  document.head.appendChild(style);
 
   /* ── Details modal ── */
   function openDetailsModal(theme) {
     currentThemeId   = theme.id;
     currentThemeVars = theme.vars || {};
+    currentThemeData = theme; // Store full theme data for installation
     previewLoaded    = false;
 
     const colors = theme.colors || {};
@@ -657,7 +748,6 @@
     document.getElementById('dm-title').textContent    = theme.display_name;
     document.getElementById('dm-meta').textContent     = 'by ' + theme.author + '  ·  v' + theme.version;
     document.getElementById('dm-desc').textContent     = theme.description;
-    document.getElementById('dm-download').href        = theme.download_url;
     document.getElementById('preview-url').textContent = 'localhost — ' + theme.display_name + ' applied';
 
     // stripe
@@ -720,8 +810,12 @@
       document.getElementById('preview-panel-inner').classList.add('active');
       if (!previewLoaded && currentThemeId) {
         document.getElementById('preview-loading').style.display = 'flex';
-        const encoded = btoa(JSON.stringify(currentThemeVars));
-        document.getElementById('preview-iframe').src = 'http://localhost:5173/?__theme=' + encoded;
+        const themeData = {
+          name: currentThemeData.display_name,
+          vars: currentThemeVars
+        };
+        const encoded = btoa(JSON.stringify(themeData));
+        document.getElementById('preview-iframe').src = 'http://localhost:5173/?__theme_preview=' + encoded + '&__preview_mode=true';
       }
     } else {
       document.getElementById('preview-panel-inner').classList.remove('active');
