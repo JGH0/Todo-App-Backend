@@ -52,15 +52,23 @@ class TodoModel extends Model
         return $builder->get()->getResultArray();
     }
 
-    // Get todos by user with categories
-    public function getByUserWithCategories($userId)
+    // Get todos by user with categories (optionally filtered by todo id)
+    public function getByUserWithCategories($userId, $todoId = null)
     {
-        return $this->select('todos.*, GROUP_CONCAT(categories.name) as category_names')
-                    ->join('todo_categories', 'todos.id = todo_categories.todo_id', 'left')
-                    ->join('categories', 'todo_categories.category_id = categories.id', 'left')
-                    ->where('todos.user_id', $userId)
-                    ->groupBy('todos.id')
-                    ->get()
-                    ->getResultArray();
+        $builder = $this->select('
+            todos.*,
+            GROUP_CONCAT(DISTINCT categories.id SEPARATOR \',\') as category_ids,
+            GROUP_CONCAT(DISTINCT categories.name SEPARATOR \', \') as category_names
+        ')
+        ->join('todo_categories', 'todos.id = todo_categories.todo_id', 'left')
+        ->join('categories', 'todo_categories.category_id = categories.id', 'left')
+        ->where('todos.user_id', $userId)
+        ->groupBy('todos.id');
+
+        if ($todoId) {
+            $builder->where('todos.id', $todoId);
+        }
+
+        return $builder->get()->getResultArray();
     }
 }

@@ -63,6 +63,11 @@ class TodoController extends BaseController
 
         $this->todoModel->insert($data);
         
+        // Link category if provided
+        if (!empty($json['category_id'])) {
+            $this->linkCategory($data['id'], $json['category_id']);
+        }
+        
         // Manually log the activity
         try {
             $activityLogModel = new \App\Models\ActivityLogModel();
@@ -79,9 +84,9 @@ class TodoController extends BaseController
             log_message('error', 'Failed to log activity: ' . $e->getMessage());
         }
         
-        $todo = $this->todoModel->getByUserWithCategories($userId, $data['id']);
+        $todos = $this->todoModel->getByUserWithCategories($userId, $data['id']);
 
-        return $this->successResponse($todo, 'Todo created successfully', 201);
+        return $this->successResponse($todos[0] ?? null, 'Todo created successfully', 201);
     }
 
     /**
@@ -91,13 +96,13 @@ class TodoController extends BaseController
     public function show($id = null)
     {
         $userId = $this->getUserId();
-        $todo = $this->todoModel->getByUserWithCategories($userId, $id);
+        $todos = $this->todoModel->getByUserWithCategories($userId, $id);
 
-        if (!$todo) {
+        if (empty($todos)) {
             return $this->errorResponse('Todo not found', 404);
         }
 
-        return $this->successResponse($todo, 'Todo retrieved successfully');
+        return $this->successResponse($todos[0], 'Todo retrieved successfully');
     }
 
     /**
@@ -114,14 +119,26 @@ class TodoController extends BaseController
         }
 
         $json = $this->request->getJSON(true);
+        
+        // Handle category update separately (not a column in todos table)
+        $hasCategoryUpdate = array_key_exists('category_id', $json);
+        if ($hasCategoryUpdate) {
+            $categoryId = $json['category_id'];
+            // Remove all existing category links
+            $this->todoCategoryModel->where('todo_id', $id)->delete();
+            // Link the new category
+            if (!empty($categoryId)) {
+                $this->linkCategory($id, $categoryId);
+            }
+        }
+        
+        // Update todo fields
         $allowedFields = ['title', 'description', 'status', 'due_date', 'due_time', 'sync_enabled', 'reminder_enabled', 'recurring_enabled', 'project_id'];
         $updateData = array_intersect_key($json, array_flip($allowedFields));
 
-        if (empty($updateData)) {
-            return $this->errorResponse('No valid fields to update');
+        if (!empty($updateData)) {
+            $this->todoModel->update($id, $updateData);
         }
-
-        $this->todoModel->update($id, $updateData);
         
         // Manually log the activity
         try {
@@ -139,9 +156,9 @@ class TodoController extends BaseController
             log_message('error', 'Failed to log activity: ' . $e->getMessage());
         }
         
-        $todo = $this->todoModel->getByUserWithCategories($userId, $id);
+        $updated = $this->todoModel->getByUserWithCategories($userId, $id);
 
-        return $this->successResponse($todo, 'Todo updated successfully');
+        return $this->successResponse($updated[0] ?? null, 'Todo updated successfully');
     }
 
     /**
@@ -236,6 +253,34 @@ class TodoController extends BaseController
             ->delete();
 
         return $this->successResponse(null, 'Category removed from todo successfully');
+    }
+
+    /**
+     * Link a category to a todo
+     */
+    private function linkCategory(string $todoId, string $categoryId): void
+    {
+        $userId = $this->getUserId();
+        
+        // Verify category belongs to user
+        $categoryModel = new \App\Models\CategoryModel();
+        $category = $categoryModel->where('id', $categoryId)->where('user_id', $userId)->first();
+        if (!$category) {
+            return;
+        }
+        
+        // Check if link already exists
+        $existing = $this->todoCategoryModel
+            ->where('todo_id', $todoId)
+            ->where('category_id', $categoryId)
+            ->first();
+            
+        if (!$existing) {
+            $this->todoCategoryModel->insert([
+                'todo_id' => $todoId,
+                'category_id' => $categoryId,
+            ]);
+        }
     }
 
     private function generateUuid(): string
