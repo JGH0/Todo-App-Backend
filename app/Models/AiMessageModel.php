@@ -22,7 +22,7 @@ class AiMessageModel extends Model
 
     protected $useTimestamps = true;
     protected $createdField = 'created_at';
-    protected $updatedField = null;
+    protected $updatedField = '';
 
     protected $validationRules = [
         'chat_id' => 'required',

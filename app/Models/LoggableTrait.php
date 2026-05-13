@@ -134,7 +134,7 @@ trait LoggableTrait
     {
         try {
             $request = \Config\Services::request();
-            return $request->getUserAgent()->toString();
+            return $request->getUserAgent()->getAgentString();
         } catch (\Exception $e) {
             return 'CLI/Script';
         }

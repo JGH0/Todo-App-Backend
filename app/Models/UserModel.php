@@ -6,8 +6,6 @@ use CodeIgniter\Model;
 
 class UserModel extends Model
 {
-    use LoggableTrait;
-
     protected $table = 'users';
     protected $primaryKey = 'id';
     protected $useAutoIncrement = false;
@@ -40,9 +38,4 @@ class UserModel extends Model
             'is_unique' => 'This email is already registered',
         ],
     ];
-
-    protected function getEntityType(): string
-    {
-        return 'user';
-    }
 }

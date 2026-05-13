@@ -309,5 +309,38 @@ class SampleDataSeeder extends Seeder
         if (!empty($recurringTaskCategories)) {
             $this->db->table('recurring_task_categories')->insertBatch($recurringTaskCategories);
         }
+
+        // Create an API key for the demo user
+        $existingApiKey = $this->db->table('api_auth_keys')
+            ->where('user_id', $userId)
+            ->where('name', 'Demo API Key')
+            ->get()
+            ->getRowArray();
+
+        if (!$existingApiKey) {
+            $apiKey = 'todo_' . bin2hex(random_bytes(32));
+            $keyHash = hash('sha256', $apiKey);
+            $keyPrefix = substr($apiKey, 0, 8);
+
+            $this->db->table('api_auth_keys')->insert([
+                'id' => $generateUuid(),
+                'user_id' => $userId,
+                'key_hash' => $keyHash,
+                'key_prefix' => $keyPrefix,
+                'name' => 'Demo API Key',
+                'scopes' => json_encode(['read', 'write']),
+                'expires_at' => null,
+                'is_active' => true,
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+
+            echo "\n========================================\n";
+            echo "DEMO API KEY CREATED:\n";
+            echo "========================================\n";
+            echo "API Key: {$apiKey}\n";
+            echo "Prefix: {$keyPrefix}\n";
+            echo "Use this key in the X-API-Key header\n";
+            echo "========================================\n\n";
+        }
     }
 }

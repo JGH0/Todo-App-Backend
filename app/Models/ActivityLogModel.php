@@ -25,7 +25,7 @@ class ActivityLogModel extends Model
 
     protected $useTimestamps = true;
     protected $createdField = 'created_at';
-    protected $updatedField = null;
+    protected $updatedField = '';
 
     protected $validationRules = [
         'action' => 'required|max_length[255]',
@@ -34,9 +34,6 @@ class ActivityLogModel extends Model
     // Log an activity
     public function logActivity($data)
     {
-        // Disable events to prevent any recursive logging
-        $this->skipEvents();
-
         if (!isset($data['id'])) {
             $data['id'] = $this->generateUuid();
         }
@@ -44,12 +41,9 @@ class ActivityLogModel extends Model
             $data['created_at'] = date('Y-m-d H:i:s');
         }
 
-        $result = $this->insert($data);
-
-        // Re-enable events
-        $this->skipEvents(false);
-
-        return $result;
+        // Use builder directly to avoid triggering events
+        $builder = $this->db->table($this->table);
+        return $builder->insert($data);
     }
 
     // Get logs by user
