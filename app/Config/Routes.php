@@ -33,6 +33,11 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => '
     // Marketplace - Public access
     $routes->get('marketplace/themes', 'MarketplaceController::index');
     $routes->get('marketplace/themes/(:num)', 'MarketplaceController::show/$1');
+    
+    // JWT Authentication
+    $routes->post('auth/jwt/register', 'AuthController::jwtRegister');
+    $routes->post('auth/jwt/login', 'AuthController::jwtLogin');
+    $routes->post('auth/jwt/refresh', 'AuthController::jwtRefresh');
 });
 
 // Protected endpoints (API key authentication required)

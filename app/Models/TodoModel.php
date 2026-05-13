@@ -6,53 +6,51 @@ use CodeIgniter\Model;
 
 class TodoModel extends Model
 {
-    protected $table = 'todos';
-    protected $primaryKey = 'id';
+    protected $table            = 'todos';
+    protected $primaryKey       = 'id';
     protected $useAutoIncrement = false;
-    protected $returnType = 'array';
-    protected $useSoftDeletes = false;
-    protected $allowedFields = [
-        'id',
-        'user_id',
-        'title',
-        'description',
-        'status',
-        'due_date',
-        'due_time',
-        'sync_enabled',
-        'reminder_enabled',
-        'recurring_enabled',
-        'project_id',
-        'created_at',
-        'updated_at',
+    protected $returnType       = 'array';
+    protected $useSoftDeletes   = false;
+    protected $allowedFields    = [
+        'id', 'user_id', 'title', 'description', 'status',
+        'due_date', 'due_time', 'sync_enabled', 'reminder_enabled',
+        'recurring_enabled', 'project_id', 'created_at', 'updated_at',
     ];
 
     protected $useTimestamps = true;
-    protected $createdField = 'created_at';
-    protected $updatedField = 'updated_at';
+    protected $createdField  = 'created_at';
+    protected $updatedField  = 'updated_at';
 
     protected $validationRules = [
-        'user_id' => 'required',
-        'title' => 'required|max_length[255]',
-        'status' => 'permit_empty|in_list[open,in_progress,completed,archived]',
+        'user_id' => [
+            'rules' => 'required',
+            'errors' => ['required' => 'User ID is required.'],
+        ],
+        'title' => [
+            'rules' => 'required|max_length[255]',
+            'errors' => [
+                'required'   => 'The todo title is required.',
+                'max_length' => 'The title must not exceed 255 characters.',
+            ],
+        ],
+        'status' => [
+            'rules' => 'permit_empty|in_list[open,in_progress,completed,archived]',
+            'errors' => [
+                'in_list' => 'Status must be one of: open, in_progress, completed, archived.',
+            ],
+        ],
+        'due_date' => [
+            'rules' => 'permit_empty|valid_date[Y-m-d]',
+            'errors' => ['valid_date' => 'Due date must be in YYYY-MM-DD format.'],
+        ],
+        'due_time' => [
+            'rules' => 'permit_empty|valid_date[H:i:s]',
+            'errors' => ['valid_date' => 'Due time must be in HH:MM format.'],
+        ],
     ];
 
-    // Get todos with categories
-    public function getWithCategories($todoId = null)
-    {
-        $builder = $this->select('todos.*, GROUP_CONCAT(categories.name) as category_names')
-                        ->join('todo_categories', 'todos.id = todo_categories.todo_id', 'left')
-                        ->join('categories', 'todo_categories.category_id = categories.id', 'left')
-                        ->groupBy('todos.id');
+    // ── Queries ────────────────────────────────────────────────────────────
 
-        if ($todoId) {
-            $builder->where('todos.id', $todoId);
-        }
-
-        return $builder->get()->getResultArray();
-    }
-
-    // Get todos by user with categories (optionally filtered by todo id)
     public function getByUserWithCategories($userId, $todoId = null)
     {
         $builder = $this->select('

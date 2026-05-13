@@ -6,26 +6,30 @@ use CodeIgniter\Model;
 
 class ProjectModel extends Model
 {
-    protected $table = 'projects';
-    protected $primaryKey = 'id';
+    protected $table            = 'projects';
+    protected $primaryKey       = 'id';
     protected $useAutoIncrement = false;
-    protected $returnType = 'array';
-    protected $useSoftDeletes = false;
-    protected $allowedFields = [
-        'id',
-        'user_id',
-        'name',
-        'description',
-        'color',
-        'created_at',
+    protected $returnType       = 'array';
+    protected $useSoftDeletes   = false;
+    protected $allowedFields    = [
+        'id', 'user_id', 'name', 'description', 'color', 'created_at', 'updated_at',
     ];
 
     protected $useTimestamps = true;
-    protected $createdField = 'created_at';
-    protected $updatedField = '';
+    protected $createdField  = 'created_at';
+    protected $updatedField  = '';
 
     protected $validationRules = [
-        'user_id' => 'required',
-        'name' => 'required|max_length[255]',
+        'user_id' => [
+            'rules' => 'required',
+            'errors' => ['required' => 'User ID is required.'],
+        ],
+        'name' => [
+            'rules' => 'required|max_length[255]',
+            'errors' => [
+                'required'   => 'The project name is required.',
+                'max_length' => 'The project name must not exceed 255 characters.',
+            ],
+        ],
     ];
 }

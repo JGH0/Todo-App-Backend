@@ -221,18 +221,163 @@ class AuthController extends BaseController
         ], 'API key created successfully');
     }
 
+    // ========================================================================
+    //   JWT Authentication
+    // ========================================================================
+
+    /**
+     * Register a new user and return JWT + API key
+     * POST /api/v1/auth/jwt/register
+     */
+    public function jwtRegister()
+    {
+        // Reuse the existing register validation logic
+        $json = $this->request->getJSON(true);
+
+        $rules = [
+            'email' => [
+                'rules' => 'required|valid_email|is_unique[users.email]',
+                'errors' => [
+                    'required'    => 'Email is required',
+                    'valid_email' => 'Please provide a valid email address',
+                    'is_unique'   => 'This email is already registered',
+                ],
+            ],
+            'password' => [
+                'rules' => 'required|min_length[8]',
+                'errors' => [
+                    'required'   => 'Password is required',
+                    'min_length' => 'Password must be at least 8 characters long',
+                ],
+            ],
+            'name' => [
+                'rules' => 'required|max_length[255]',
+                'errors' => [
+                    'required'   => 'Name is required',
+                    'max_length' => 'Name must not exceed 255 characters',
+                ],
+            ],
+        ];
+
+        if (!$this->validateRequest($rules)) {
+            return;
+        }
+
+        try {
+            $userId = $this->generateUuid();
+
+            $userData = [
+                'id'            => $userId,
+                'email'         => $json['email'],
+                'password_hash' => password_hash($json['password'], PASSWORD_BCRYPT),
+                'name'          => $json['name'],
+                'avatar_url'    => $json['avatar_url'] ?? null,
+                'settings'      => isset($json['settings']) ? json_encode($json['settings']) : json_encode(['theme' => 'light']),
+                'created_at'    => date('Y-m-d H:i:s'),
+                'updated_at'    => date('Y-m-d H:i:s'),
+            ];
+
+            $this->userModel->insert($userData);
+
+            // Create API key for the new user
+            $apiKey = $this->apiAuthKeyModel->createKey(
+                $userId,
+                'Default API Key',
+                ['read', 'write'],
+                null
+            );
+
+            // Generate JWT
+            $jwt = $this->encodeJwt([
+                'sub'   => $userId,
+                'email' => $json['email'],
+                'name'  => $json['name'],
+            ]);
+
+            unset($userData['password_hash']);
+
+            return $this->successResponse([
+                'user'    => $userData,
+                'token'   => $jwt,
+                'api_key' => $apiKey['key'],
+            ], 'User registered successfully', 201);
+        } catch (\Exception $e) {
+            return $this->errorResponse('Registration failed: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Login with email/password and return JWT
+     * POST /api/v1/auth/jwt/login
+     */
+    public function jwtLogin()
+    {
+        $json = $this->request->getJSON(true);
+
+        $rules = [
+            'email' => 'required|valid_email',
+            'password' => 'required',
+        ];
+
+        if (!$this->validateRequest($rules)) {
+            return;
+        }
+
+        try {
+            $user = $this->userModel->where('email', $json['email'])->first();
+
+            if (!$user || !password_verify($json['password'], $user['password_hash'])) {
+                return $this->errorResponse('Invalid email or password', 401);
+            }
+
+            // Generate JWT
+            $jwt = $this->encodeJwt([
+                'sub'   => $user['id'],
+                'email' => $user['email'],
+                'name'  => $user['name'],
+            ]);
+
+            return $this->successResponse([
+                'user'  => [
+                    'id'    => $user['id'],
+                    'email' => $user['email'],
+                    'name'  => $user['name'],
+                ],
+                'token' => $jwt,
+            ], 'Login successful');
+        } catch (\Exception $e) {
+            return $this->errorResponse('Login failed: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Refresh JWT token
+     * POST /api/v1/auth/jwt/refresh
+     */
+    public function jwtRefresh()
+    {
+        $payload = $this->decodeJwtFromRequest();
+
+        if (!$payload || empty($payload['sub'])) {
+            return $this->errorResponse('Invalid or expired token', 401);
+        }
+
+        $user = $this->userModel->find($payload['sub']);
+        if (!$user) {
+            return $this->errorResponse('User not found', 401);
+        }
+
+        $jwt = $this->encodeJwt([
+            'sub'   => $user['id'],
+            'email' => $user['email'],
+            'name'  => $user['name'],
+        ]);
+
+        return $this->successResponse(['token' => $jwt], 'Token refreshed successfully');
+    }
+
     /**
      * Generate UUID
      */
-    private function generateUuid(): string
-    {
-        return sprintf(
-            '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000,
-            mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
-        );
-    }
+
 }
