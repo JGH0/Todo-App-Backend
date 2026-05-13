@@ -7,8 +7,6 @@ use CodeIgniter\Router\RouteCollection;
  */
 $routes->get('/', 'Home::index');
 $routes->get('/themes', 'ThemeStore::index');
-<<<<<<< HEAD
-=======
 $routes->post('/themes/upload', 'ThemeStore::upload');
 $routes->get('/themes/preview/(:segment)', 'ThemeStore::preview/$1');
 
@@ -92,7 +90,6 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => [
     $routes->delete('user/themes/(:segment)', 'UserThemeController::delete/$1');
 });
 $routes->get('/themes', 'ThemeStore::index');
->>>>>>> main
 $routes->options('/themes', static function () {
     header('Access-Control-Allow-Origin: http://localhost:5173');
     header('Access-Control-Allow-Methods: GET, OPTIONS');
@@ -109,11 +106,3 @@ $routes->options('/themes/upload', static function () {
     return response()->setStatusCode(204);
 });
 $routes->get('/themes/preview/(:segment)', 'ThemeStore::preview/$1');
-<<<<<<< HEAD
-$routes->post('/themes/install/(:segment)', 'ThemeStore::install/$1');
-$routes->post('/themes/activate/(:segment)', 'ThemeStore::activate/$1');
-$routes->delete('/themes/uninstall/(:segment)', 'ThemeStore::uninstall/$1');
-$routes->get('/themes/my-themes', 'ThemeStore::myThemes');
-$routes->get('/themes/(:segment)', 'ThemeStore::serveCss/$1');
-=======
->>>>>>> main
