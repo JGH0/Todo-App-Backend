@@ -44,6 +44,16 @@ class CategoryController extends BaseController
             return;
         }
 
+        // Check for duplicate name per user
+        $existing = $this->categoryModel
+            ->where('user_id', $userId)
+            ->where('name', $json['name'])
+            ->first();
+
+        if ($existing) {
+            return $this->errorResponse('A category with this name already exists.', 409);
+        }
+
         $data = [
             'id' => $this->generateUuid(),
             'user_id' => $userId,
@@ -88,6 +98,20 @@ class CategoryController extends BaseController
         }
 
         $json = $this->request->getJSON(true);
+
+        // Check for duplicate name on rename (excluding current category)
+        if (!empty($json['name']) && strtolower($json['name']) !== strtolower($category['name'])) {
+            $existing = $this->categoryModel
+                ->where('user_id', $userId)
+                ->where('name', $json['name'])
+                ->where('id !=', $id)
+                ->first();
+
+            if ($existing) {
+                return $this->errorResponse('A category with this name already exists.', 409);
+            }
+        }
+
         $allowedFields = ['name', 'color', 'favorite'];
         $updateData = array_intersect_key($json, array_flip($allowedFields));
 
