@@ -2,7 +2,7 @@
 <phpunit
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd"
-    bootstrap="vendor/codeigniter4/framework/system/Test/bootstrap.php"
+    bootstrap="tests/bootstrap.php"
     backupGlobals="false"
     beStrictAboutOutputDuringTests="true"
     colors="true"
@@ -25,6 +25,8 @@
     <testsuites>
         <testsuite name="App">
             <directory>./tests</directory>
+            <exclude>./tests/database</exclude>
+            <exclude>./tests/session</exclude>
         </testsuite>
     </testsuites>
     <logging>
@@ -51,13 +53,18 @@
         <!-- Directory containing the front controller (index.php) -->
         <const name="PUBLICPATH" value="./public/"/>
         <!-- Database configuration -->
-        <!-- Uncomment to provide your own database for testing
-            <env name="database.tests.hostname" value="localhost"/>
-            <env name="database.tests.database" value="tests"/>
-            <env name="database.tests.username" value="tests_user"/>
-            <env name="database.tests.password" value=""/>
-            <env name="database.tests.DBDriver" value="MySQLi"/>
-            <env name="database.tests.DBPrefix" value="tests_"/>
-            -->
+        <!-- MySQLi test database matching the .env credentials.
+             The tests group defaults to SQLite3 which is not available.
+             Change the database name to a separate test DB to avoid
+             overwriting live data. -->
+        <env name="database.tests.hostname" value="127.0.0.1"/>
+        <env name="database.tests.database"   value="TodoApp"/>
+        <env name="database.tests.username"   value="root"/>
+        <env name="database.tests.password"   value=""/>
+        <env name="database.tests.DBDriver"   value="MySQLi"/>
+        <env name="database.tests.DBPrefix"   value=""/>
+        <!-- Note: DBPrefix removed so queries match the migrated tables.
+             CI4 default tests DBPrefix = "db_" would query db_users,
+             db_todos etc. which don't exist on this database. -->
     </php>
 </phpunit>

@@ -128,3 +128,6 @@ _modules/*
 env
 .claude/
 .claude/*
+
+# Generated docs
+/public/api-docs.html
