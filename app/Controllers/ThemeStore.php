@@ -24,8 +24,9 @@ class ThemeStore extends BaseController
         }
 
         if ($this->request->isAJAX() || $this->request->hasHeader('Fetch') || str_contains($this->request->getHeaderLine('Accept'), 'application/json')) {
-            header('Access-Control-Allow-Origin: http://localhost:5173');
-            header('Access-Control-Allow-Credentials: true');
+            $origin = $this->request->getHeaderLine('Origin') ?: '*';
+            header('Access-Control-Allow-Origin: ' . $origin);
+            header('Vary: Origin');
             return $this->response->setJSON($themes);
         }
 
@@ -38,8 +39,9 @@ class ThemeStore extends BaseController
 
     public function upload(): Response
     {
-        header('Access-Control-Allow-Origin: http://localhost:5173');
-        header('Access-Control-Allow-Credentials: true');
+        $origin = $this->request->getHeaderLine('Origin') ?: '*';
+        header('Access-Control-Allow-Origin: ' . $origin);
+        header('Vary: Origin');
 
         $file        = $this->request->getFile('theme_css');
         $displayName = trim($this->request->getPost('display_name') ?? '');

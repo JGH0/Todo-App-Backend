@@ -98,18 +98,20 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1', 'filter' => [
 });
 $routes->get('/themes', 'ThemeStore::index');
 $routes->options('/themes', static function () {
-    header('Access-Control-Allow-Origin: http://localhost:5173');
+    $origin = service('request')->getHeaderLine('Origin') ?: '*';
+    header('Access-Control-Allow-Origin: ' . $origin);
     header('Access-Control-Allow-Methods: GET, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Accept, Fetch');
-    header('Access-Control-Allow-Credentials: true');
+    header('Access-Control-Allow-Headers: Content-Type, Accept');
+    header('Vary: Origin');
     return response()->setStatusCode(204);
 });
 $routes->post('/themes/upload', 'ThemeStore::upload');
 $routes->options('/themes/upload', static function () {
-    header('Access-Control-Allow-Origin: http://localhost:5173');
+    $origin = service('request')->getHeaderLine('Origin') ?: '*';
+    header('Access-Control-Allow-Origin: ' . $origin);
     header('Access-Control-Allow-Methods: POST, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Accept, Fetch');
-    header('Access-Control-Allow-Credentials: true');
+    header('Access-Control-Allow-Headers: Content-Type, Accept');
+    header('Vary: Origin');
     return response()->setStatusCode(204);
 });
 $routes->get('/themes/preview/(:segment)', 'ThemeStore::preview/$1');
