@@ -5,6 +5,7 @@ namespace App\Controllers\Api\V1;
 use App\Controllers\Api\BaseController;
 use App\Models\RecurringTaskModel;
 use App\Models\RecurringTaskCategoryModel;
+use App\Models\CategoryModel;
 
 class RecurringTaskController extends BaseController
 {
@@ -13,111 +14,147 @@ class RecurringTaskController extends BaseController
 
     public function __construct()
     {
-        $this->recurringTaskModel = new RecurringTaskModel();
+        $this->recurringTaskModel         = new RecurringTaskModel();
         $this->recurringTaskCategoryModel = new RecurringTaskCategoryModel();
     }
 
+    const SORTABLE   = ['title', 'schedule', 'created_at'];
+    const FILTERABLE = ['schedule', 'favorite'];
+
     /**
-     * Get all recurring tasks for the authenticated user
      * GET /api/v1/recurring-tasks
      */
     public function index()
     {
-        $userId = $this->getUserId();
-        $tasks = $this->recurringTaskModel->getByUserWithCategories($userId);
+        $userId  = $this->getUserId();
+        $filters = $this->getFilterParams(self::FILTERABLE);
+        $sorts   = $this->getSortParams(self::SORTABLE);
 
-        return $this->successResponse($tasks, 'Recurring tasks retrieved successfully');
+        $builder = $this->recurringTaskModel
+            ->select('recurring_tasks.*, GROUP_CONCAT(DISTINCT categories.id SEPARATOR \',\') as category_ids, GROUP_CONCAT(DISTINCT categories.name SEPARATOR \', \') as category_names')
+            ->join('recurring_task_categories', 'recurring_tasks.id = recurring_task_categories.recurring_task_id', 'left')
+            ->join('categories', 'recurring_task_categories.category_id = categories.id', 'left')
+            ->where('recurring_tasks.user_id', $userId)
+            ->groupBy('recurring_tasks.id');
+
+        $this->applyFilters($builder, $filters);
+
+        if (empty($sorts)) {
+            $builder->orderBy('recurring_tasks.created_at', 'DESC');
+        } else {
+            $this->applySort($builder, $sorts);
+        }
+
+        return $this->paginatedResponse($builder, 'Recurring tasks retrieved successfully');
     }
 
     /**
-     * Create a new recurring task
      * POST /api/v1/recurring-tasks
      */
     public function create()
     {
         $userId = $this->getUserId();
-        $json = $this->request->getJSON(true);
 
-        $rules = [
-            'title' => 'required|max_length[255]',
-            'schedule' => 'required|in_list[daily,weekly,monthly,custom]',
-        ];
-
-        if (!$this->validateRequest($rules)) {
+        if (!$this->validateWithModel($this->recurringTaskModel)) {
             return;
         }
 
+        $json = $this->request->getJSON(true);
+
         $data = [
-            'id' => $this->generateUuid(),
-            'user_id' => $userId,
-            'title' => $json['title'],
+            'id'          => $this->generateUuid(),
+            'user_id'     => $userId,
+            'title'       => $json['title'],
             'description' => $json['description'] ?? null,
-            'schedule' => $json['schedule'],
-            'custom_days' => $json['custom_days'] ? json_encode($json['custom_days']) : json_encode([]),
-            'favorite' => $json['favorite'] ?? false,
+            'schedule'    => $json['schedule'] ?? 'weekly',
+            'custom_days' => isset($json['custom_days']) ? json_encode($json['custom_days']) : '[]',
+            'favorite'    => !empty($json['favorite']),
         ];
 
         $this->recurringTaskModel->insert($data);
+
+        // Link category if provided
+        if (!empty($json['category_id'])) {
+            $this->linkCategory($data['id'], $json['category_id']);
+        }
+
+        $this->logActivity('recurring_task_created', 'recurring_task', $data['id'], [
+            'title' => $data['title'],
+        ]);
+
         $task = $this->recurringTaskModel->getByUserWithCategories($userId, $data['id']);
 
-        return $this->successResponse($task, 'Recurring task created successfully', 201);
+        return $this->successResponse($task[0] ?? null, 'Recurring task created successfully', 201);
     }
 
     /**
-     * Get a specific recurring task
      * GET /api/v1/recurring-tasks/{id}
      */
     public function show($id = null)
     {
         $userId = $this->getUserId();
-        $task = $this->recurringTaskModel->getByUserWithCategories($userId, $id);
+        $tasks  = $this->recurringTaskModel->getByUserWithCategories($userId, $id);
 
-        if (!$task) {
+        if (empty($tasks)) {
             return $this->errorResponse('Recurring task not found', 404);
         }
 
-        return $this->successResponse($task, 'Recurring task retrieved successfully');
+        return $this->successResponse($tasks[0], 'Recurring task retrieved successfully');
     }
 
     /**
-     * Update a recurring task
      * PUT /api/v1/recurring-tasks/{id}
      */
     public function update($id = null)
     {
         $userId = $this->getUserId();
-        $task = $this->recurringTaskModel->where('id', $id)->where('user_id', $userId)->first();
+        $task   = $this->recurringTaskModel->where('id', $id)->where('user_id', $userId)->first();
 
         if (!$task) {
             return $this->errorResponse('Recurring task not found', 404);
         }
 
         $json = $this->request->getJSON(true);
-        $allowedFields = ['title', 'description', 'schedule', 'custom_days', 'favorite'];
-        $updateData = array_intersect_key($json, array_flip($allowedFields));
 
-        if (isset($updateData['custom_days'])) {
+        // Handle category update
+        if (array_key_exists('category_id', $json)) {
+            $this->recurringTaskCategoryModel->where('recurring_task_id', $id)->delete();
+            if (!empty($json['category_id'])) {
+                $this->linkCategory($id, $json['category_id']);
+            }
+        }
+
+        $allowedFields = ['title', 'description', 'schedule', 'custom_days', 'favorite'];
+        $updateData    = array_intersect_key($json, array_flip($allowedFields));
+
+        // Convert custom_days array to JSON string
+        if (isset($updateData['custom_days']) && is_array($updateData['custom_days'])) {
             $updateData['custom_days'] = json_encode($updateData['custom_days']);
         }
-
-        if (empty($updateData)) {
-            return $this->errorResponse('No valid fields to update');
+        if (array_key_exists('favorite', $updateData)) {
+            $updateData['favorite'] = !empty($updateData['favorite']);
         }
 
-        $this->recurringTaskModel->update($id, $updateData);
-        $task = $this->recurringTaskModel->getByUserWithCategories($userId, $id);
+        if (!empty($updateData)) {
+            $this->recurringTaskModel->update($id, $updateData);
+        }
 
-        return $this->successResponse($task, 'Recurring task updated successfully');
+        $this->logActivity('recurring_task_updated', 'recurring_task', $id, [
+            'title' => $task['title'] ?? 'Unknown',
+        ]);
+
+        $updated = $this->recurringTaskModel->getByUserWithCategories($userId, $id);
+
+        return $this->successResponse($updated[0] ?? null, 'Recurring task updated successfully');
     }
 
     /**
-     * Delete a recurring task
      * DELETE /api/v1/recurring-tasks/{id}
      */
     public function delete($id = null)
     {
         $userId = $this->getUserId();
-        $task = $this->recurringTaskModel->where('id', $id)->where('user_id', $userId)->first();
+        $task   = $this->recurringTaskModel->where('id', $id)->where('user_id', $userId)->first();
 
         if (!$task) {
             return $this->errorResponse('Recurring task not found', 404);
@@ -125,30 +162,31 @@ class RecurringTaskController extends BaseController
 
         $this->recurringTaskModel->delete($id);
 
+        $this->logActivity('recurring_task_deleted', 'recurring_task', $id, [
+            'title' => $task['title'] ?? 'Unknown',
+        ]);
+
         return $this->successResponse(null, 'Recurring task deleted successfully');
     }
 
     /**
-     * Add a category to a recurring task
      * POST /api/v1/recurring-tasks/{id}/categories
      */
     public function addCategory($taskId = null)
     {
         $userId = $this->getUserId();
-        $json = $this->request->getJSON(true);
+        $json   = $this->request->getJSON(true);
 
         $rules = ['category_id' => 'required'];
         if (!$this->validateRequest($rules)) {
             return;
         }
 
-        // Verify task belongs to user
         $task = $this->recurringTaskModel->where('id', $taskId)->where('user_id', $userId)->first();
         if (!$task) {
             return $this->errorResponse('Recurring task not found', 404);
         }
 
-        // Check if link already exists
         $existing = $this->recurringTaskCategoryModel
             ->where('recurring_task_id', $taskId)
             ->where('category_id', $json['category_id'])
@@ -160,21 +198,19 @@ class RecurringTaskController extends BaseController
 
         $this->recurringTaskCategoryModel->insert([
             'recurring_task_id' => $taskId,
-            'category_id' => $json['category_id'],
+            'category_id'       => $json['category_id'],
         ]);
 
         return $this->successResponse(null, 'Category added to recurring task successfully', 201);
     }
 
     /**
-     * Remove a category from a recurring task
      * DELETE /api/v1/recurring-tasks/{id}/categories/{categoryId}
      */
     public function removeCategory($taskId = null, $categoryId = null)
     {
         $userId = $this->getUserId();
 
-        // Verify task belongs to user
         $task = $this->recurringTaskModel->where('id', $taskId)->where('user_id', $userId)->first();
         if (!$task) {
             return $this->errorResponse('Recurring task not found', 404);
@@ -188,15 +224,27 @@ class RecurringTaskController extends BaseController
         return $this->successResponse(null, 'Category removed from recurring task successfully');
     }
 
-    private function generateUuid(): string
+    /**
+     * Link a category (internal helper)
+     */
+    private function linkCategory(string $taskId, string $categoryId): void
     {
-        return sprintf(
-            '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000,
-            mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
-        );
+        $userId        = $this->getUserId();
+        $categoryModel = new CategoryModel();
+        $category      = $categoryModel->where('id', $categoryId)->where('user_id', $userId)->first();
+
+        if (!$category) return;
+
+        $existing = $this->recurringTaskCategoryModel
+            ->where('recurring_task_id', $taskId)
+            ->where('category_id', $categoryId)
+            ->first();
+
+        if (!$existing) {
+            $this->recurringTaskCategoryModel->insert([
+                'recurring_task_id' => $taskId,
+                'category_id'       => $categoryId,
+            ]);
+        }
     }
 }

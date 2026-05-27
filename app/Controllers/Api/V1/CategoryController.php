@@ -14,37 +14,44 @@ class CategoryController extends BaseController
         $this->categoryModel = new CategoryModel();
     }
 
+    const SORTABLE   = ['name', 'created_at'];
+    const FILTERABLE = ['favorite'];
+
     /**
-     * Get all categories for the authenticated user
      * GET /api/v1/categories
      */
     public function index()
     {
-        $userId = $this->getUserId();
-        $categories = $this->categoryModel->where('user_id', $userId)->findAll();
+        $userId  = $this->getUserId();
+        $filters = $this->getFilterParams(self::FILTERABLE);
+        $sorts   = $this->getSortParams(self::SORTABLE);
 
-        return $this->successResponse($categories, 'Categories retrieved successfully');
+        $builder = $this->categoryModel->where('user_id', $userId);
+        $this->applyFilters($builder, $filters);
+
+        if (empty($sorts)) {
+            $builder->orderBy('name', 'ASC');
+        } else {
+            $this->applySort($builder, $sorts);
+        }
+
+        return $this->paginatedResponse($builder, 'Categories retrieved successfully');
     }
 
     /**
-     * Create a new category
      * POST /api/v1/categories
      */
     public function create()
     {
         $userId = $this->getUserId();
-        $json = $this->request->getJSON(true);
 
-        $rules = [
-            'name' => 'required|max_length[255]',
-            'color' => 'required|max_length[7]',
-        ];
-
-        if (!$this->validateRequest($rules)) {
+        if (!$this->validateWithModel($this->categoryModel)) {
             return;
         }
 
-        // Check for duplicate name per user
+        $json = $this->request->getJSON(true);
+
+        // Custom duplicate check (per user)
         $existing = $this->categoryModel
             ->where('user_id', $userId)
             ->where('name', $json['name'])
@@ -55,26 +62,29 @@ class CategoryController extends BaseController
         }
 
         $data = [
-            'id' => $this->generateUuid(),
-            'user_id' => $userId,
-            'name' => $json['name'],
-            'color' => $json['color'],
-            'favorite' => $json['favorite'] ?? false,
+            'id'        => $this->generateUuid(),
+            'user_id'   => $userId,
+            'name'      => $json['name'],
+            'color'     => $json['color'],
+            'favorite'  => !empty($json['favorite']),
         ];
 
         $this->categoryModel->insert($data);
         $category = $this->categoryModel->find($data['id']);
 
+        $this->logActivity('category_created', 'category', $data['id'], [
+            'name' => $data['name'],
+        ]);
+
         return $this->successResponse($category, 'Category created successfully', 201);
     }
 
     /**
-     * Get a specific category
      * GET /api/v1/categories/{id}
      */
     public function show($id = null)
     {
-        $userId = $this->getUserId();
+        $userId   = $this->getUserId();
         $category = $this->categoryModel->where('id', $id)->where('user_id', $userId)->first();
 
         if (!$category) {
@@ -85,12 +95,11 @@ class CategoryController extends BaseController
     }
 
     /**
-     * Update a category
      * PUT /api/v1/categories/{id}
      */
     public function update($id = null)
     {
-        $userId = $this->getUserId();
+        $userId   = $this->getUserId();
         $category = $this->categoryModel->where('id', $id)->where('user_id', $userId)->first();
 
         if (!$category) {
@@ -99,7 +108,7 @@ class CategoryController extends BaseController
 
         $json = $this->request->getJSON(true);
 
-        // Check for duplicate name on rename (excluding current category)
+        // Duplicate check on rename
         if (!empty($json['name']) && strtolower($json['name']) !== strtolower($category['name'])) {
             $existing = $this->categoryModel
                 ->where('user_id', $userId)
@@ -113,25 +122,33 @@ class CategoryController extends BaseController
         }
 
         $allowedFields = ['name', 'color', 'favorite'];
-        $updateData = array_intersect_key($json, array_flip($allowedFields));
+        $updateData    = array_intersect_key($json, array_flip($allowedFields));
 
         if (empty($updateData)) {
             return $this->errorResponse('No valid fields to update');
         }
 
+        // Convert boolean
+        if (array_key_exists('favorite', $updateData)) {
+            $updateData['favorite'] = !empty($updateData['favorite']);
+        }
+
         $this->categoryModel->update($id, $updateData);
         $category = $this->categoryModel->find($id);
+
+        $this->logActivity('category_updated', 'category', $id, [
+            'name' => $category['name'] ?? 'Unknown',
+        ]);
 
         return $this->successResponse($category, 'Category updated successfully');
     }
 
     /**
-     * Delete a category
      * DELETE /api/v1/categories/{id}
      */
     public function delete($id = null)
     {
-        $userId = $this->getUserId();
+        $userId   = $this->getUserId();
         $category = $this->categoryModel->where('id', $id)->where('user_id', $userId)->first();
 
         if (!$category) {
@@ -140,18 +157,10 @@ class CategoryController extends BaseController
 
         $this->categoryModel->delete($id);
 
-        return $this->successResponse(null, 'Category deleted successfully');
-    }
+        $this->logActivity('category_deleted', 'category', $id, [
+            'name' => $category['name'] ?? 'Unknown',
+        ]);
 
-    private function generateUuid(): string
-    {
-        return sprintf(
-            '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000,
-            mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
-        );
+        return $this->successResponse(null, 'Category deleted successfully');
     }
 }

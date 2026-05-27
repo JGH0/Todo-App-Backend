@@ -14,57 +14,67 @@ class ProjectController extends BaseController
         $this->projectModel = new ProjectModel();
     }
 
+    const SORTABLE   = ['name', 'created_at'];
+    const FILTERABLE = [];
+
     /**
-     * Get all projects for the authenticated user
      * GET /api/v1/projects
      */
     public function index()
     {
-        $userId = $this->getUserId();
-        $projects = $this->projectModel->where('user_id', $userId)->findAll();
+        $userId  = $this->getUserId();
+        $filters = $this->getFilterParams(self::FILTERABLE);
+        $sorts   = $this->getSortParams(self::SORTABLE);
 
-        return $this->successResponse($projects, 'Projects retrieved successfully');
+        $builder = $this->projectModel->where('user_id', $userId);
+        $this->applyFilters($builder, $filters);
+
+        if (empty($sorts)) {
+            $builder->orderBy('created_at', 'DESC');
+        } else {
+            $this->applySort($builder, $sorts);
+        }
+
+        return $this->paginatedResponse($builder, 'Projects retrieved successfully');
     }
 
     /**
-     * Create a new project
      * POST /api/v1/projects
      */
     public function create()
     {
         $userId = $this->getUserId();
-        $json = $this->request->getJSON(true);
 
-        $rules = [
-            'name' => 'required|max_length[255]',
-            'color' => 'required|max_length[7]',
-        ];
-
-        if (!$this->validateRequest($rules)) {
+        if (!$this->validateWithModel($this->projectModel)) {
             return;
         }
 
+        $json = $this->request->getJSON(true);
+
         $data = [
-            'id' => $this->generateUuid(),
-            'user_id' => $userId,
-            'name' => $json['name'],
+            'id'          => $this->generateUuid(),
+            'user_id'     => $userId,
+            'name'        => $json['name'],
             'description' => $json['description'] ?? null,
-            'color' => $json['color'],
+            'color'       => $json['color'] ?? '#8B5CF6',
         ];
 
         $this->projectModel->insert($data);
         $project = $this->projectModel->find($data['id']);
 
+        $this->logActivity('project_created', 'project', $data['id'], [
+            'name' => $data['name'],
+        ]);
+
         return $this->successResponse($project, 'Project created successfully', 201);
     }
 
     /**
-     * Get a specific project
      * GET /api/v1/projects/{id}
      */
     public function show($id = null)
     {
-        $userId = $this->getUserId();
+        $userId  = $this->getUserId();
         $project = $this->projectModel->where('id', $id)->where('user_id', $userId)->first();
 
         if (!$project) {
@@ -75,12 +85,11 @@ class ProjectController extends BaseController
     }
 
     /**
-     * Update a project
      * PUT /api/v1/projects/{id}
      */
     public function update($id = null)
     {
-        $userId = $this->getUserId();
+        $userId  = $this->getUserId();
         $project = $this->projectModel->where('id', $id)->where('user_id', $userId)->first();
 
         if (!$project) {
@@ -88,8 +97,9 @@ class ProjectController extends BaseController
         }
 
         $json = $this->request->getJSON(true);
+
         $allowedFields = ['name', 'description', 'color'];
-        $updateData = array_intersect_key($json, array_flip($allowedFields));
+        $updateData    = array_intersect_key($json, array_flip($allowedFields));
 
         if (empty($updateData)) {
             return $this->errorResponse('No valid fields to update');
@@ -98,16 +108,19 @@ class ProjectController extends BaseController
         $this->projectModel->update($id, $updateData);
         $project = $this->projectModel->find($id);
 
+        $this->logActivity('project_updated', 'project', $id, [
+            'name' => $project['name'] ?? 'Unknown',
+        ]);
+
         return $this->successResponse($project, 'Project updated successfully');
     }
 
     /**
-     * Delete a project
      * DELETE /api/v1/projects/{id}
      */
     public function delete($id = null)
     {
-        $userId = $this->getUserId();
+        $userId  = $this->getUserId();
         $project = $this->projectModel->where('id', $id)->where('user_id', $userId)->first();
 
         if (!$project) {
@@ -116,18 +129,10 @@ class ProjectController extends BaseController
 
         $this->projectModel->delete($id);
 
-        return $this->successResponse(null, 'Project deleted successfully');
-    }
+        $this->logActivity('project_deleted', 'project', $id, [
+            'name' => $project['name'] ?? 'Unknown',
+        ]);
 
-    private function generateUuid(): string
-    {
-        return sprintf(
-            '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000,
-            mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
-        );
+        return $this->successResponse(null, 'Project deleted successfully');
     }
 }

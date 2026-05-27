@@ -1,0 +1,2186 @@
+openapi: "3.0.3"
+info:
+  title: Todo App API
+  description: |
+    RESTful API for the Todo App backend. Provides user management, todo
+    tracking with categories, projects, recurring tasks, activity logging,
+    a theme marketplace, and JWT/ApiKey authentication.
+
+    Base URL: `http://localhost:8080/api/v1`
+  version: "1.0.0"
+  contact:
+    name: Todo App Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development server
+
+paths:
+  # ──────────────────────────────────────────────────────────────────────────
+  #  AUTHENTICATION
+  # ──────────────────────────────────────────────────────────────────────────
+
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a new user
+      description: >
+        Creates a new user account and returns the user data along with a
+        newly generated API key. Store the API key securely — it will not
+        be shown again.
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: Must be unique in the system
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  description: Plain-text password (hashed with bcrypt on storage)
+                name:
+                  type: string
+                  maxLength: 255
+                avatar_url:
+                  type: string
+                  format: uri
+                  nullable: true
+                settings:
+                  type: object
+                  description: JSON-serialized user preferences
+                  default: { theme: light }
+                  properties:
+                    theme:
+                      type: string
+                      example: dark
+                    language:
+                      type: string
+                      example: en
+              example:
+                email: user@example.com
+                password: securepass123
+                name: John Doe
+                avatar_url: https://example.com/avatar.jpg
+                settings:
+                  theme: dark
+                  language: en
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: User registered successfully
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        $ref: "#/components/schemas/User"
+                      api_key:
+                        type: string
+                        description: Full API key (shown once only)
+                      key_prefix:
+                        type: string
+                        example: todo_abc1
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login with email and password
+      description: >
+        Authenticates a user and returns an API key. If the user already has
+        an active API key, only the key prefix is returned (full key was
+        shown on first creation).
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+              example:
+                email: user@example.com
+                password: securepass123
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Login successful
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          email:
+                            type: string
+                          name:
+                            type: string
+                      api_key:
+                        type: string
+                        description: Full API key (if new key was created)
+                      api_key_prefix:
+                        type: string
+                        description: Key prefix when using an existing key
+        "401":
+          description: Invalid email or password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/api-key:
+    post:
+      tags: [Authentication]
+      summary: Create an additional API key (legacy)
+      description: >
+        Creates a new API key for an app or integration. Requires email and
+        password for re-authentication.
+      operationId: createApiKeyAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                  minLength: 6
+                name:
+                  type: string
+                  description: User-friendly label for the key
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                    enum: [read, write]
+                  description: >
+                    Permission scopes. If omitted, grants full access.
+                  example: [read, write]
+                expires_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                  description: ISO-8601 expiration date
+              example:
+                email: user@example.com
+                password: securepass123
+                name: My App Key
+                scopes: [read, write]
+      responses:
+        "200":
+          description: API key created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: API key created successfully
+                  data:
+                    $ref: "#/components/schemas/ApiKeyCreated"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /auth/jwt/register:
+    post:
+      tags: [Authentication]
+      summary: Register and receive JWT + API key
+      description: >
+        Registers a new user and returns both a JWT token (for bearer auth)
+        and an API key.
+      operationId: jwtRegister
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/requestBodies/UserRegistration"
+      responses:
+        "201":
+          description: Registration successful with JWT
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: User registered successfully
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        $ref: "#/components/schemas/User"
+                      token:
+                        type: string
+                        description: JWT bearer token (valid 1 hour)
+                      api_key:
+                        type: string
+                        description: Full API key value
+
+  /auth/jwt/login:
+    post:
+      tags: [Authentication]
+      summary: Login and receive JWT
+      description: >
+        Authenticates with email/password and returns a JWT bearer token.
+      operationId: jwtLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        "200":
+          description: Login successful with JWT
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          email:
+                            type: string
+                          name:
+                            type: string
+                      token:
+                        type: string
+                        description: JWT bearer token (valid 1 hour)
+
+  /auth/jwt/refresh:
+    post:
+      tags: [Authentication]
+      summary: Refresh JWT token
+      description: >
+        Obtains a new JWT token using a valid (not yet expired) bearer token.
+      operationId: jwtRefresh
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+        "401":
+          description: Invalid or expired token
+
+  # ──────────────────────────────────────────────────────────────────────────
+  #  MARKETPLACE (public)
+  # ──────────────────────────────────────────────────────────────────────────
+
+  /marketplace/themes:
+    get:
+      tags: [Marketplace]
+      summary: List all published marketplace themes
+      description: Public endpoint — no authentication required.
+      operationId: listMarketplaceThemes
+      responses:
+        "200":
+          description: List of published themes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MarketplaceTheme"
+
+  /marketplace/themes/{id}:
+    get:
+      tags: [Marketplace]
+      summary: Get a single marketplace theme
+      operationId: getMarketplaceTheme
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Theme details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/MarketplaceTheme"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  #  USER PROFILE
+  # ──────────────────────────────────────────────────────────────────────────
+
+  /user/profile:
+    get:
+      tags: [User]
+      summary: Get authenticated user's profile
+      description: Returns profile data for the user identified by the API key.
+      operationId: getUserProfile
+      security:
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [User]
+      summary: Update the authenticated user's profile
+      operationId: updateUserProfile
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 255
+                avatar_url:
+                  type: string
+                  format: uri
+                  nullable: true
+                settings:
+                  type: object
+                  description: User preferences (JSON)
+      responses:
+        "200":
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/User"
+
+  /user/api-keys:
+    get:
+      tags: [User]
+      summary: List all API keys for the authenticated user
+      description: >
+        Returns API key metadata (prefix, name, scopes, active status).
+        The full key hash is never exposed.
+      operationId: listApiKeys
+      security:
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApiKeyMetadata"
+    post:
+      tags: [User]
+      summary: Create a new API key
+      operationId: createApiKey
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: User-friendly label
+                  default: API Key
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                    enum: [read, write]
+                  default: [read, write]
+                expires_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+      responses:
+        "200":
+          description: API key created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/ApiKeyCreated"
+
+  /user/api-keys/{id}:
+    delete:
+      tags: [User]
+      summary: Revoke an API key
+      description: Permanently deactivates an API key.
+      operationId: revokeApiKey
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Key revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: null
+                    example: null
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  #  CATEGORIES
+  # ──────────────────────────────────────────────────────────────────────────
+
+  /categories:
+    get:
+      tags: [Categories]
+      summary: List all categories for the authenticated user
+      operationId: listCategories
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+        - $ref: "#/components/parameters/sort"
+        - name: favorite
+          in: query
+          schema:
+            type: boolean
+          description: Filter by favorite status
+      responses:
+        "200":
+          description: Paginated list of categories
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessBody"
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Category"
+    post:
+      tags: [Categories]
+      summary: Create a new category
+      operationId: createCategory
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, color]
+              properties:
+                name:
+                  type: string
+                  maxLength: 255
+                color:
+                  type: string
+                  pattern: "^#[0-9a-fA-F]{6}$"
+                  description: Hex colour code for UI
+                  example: "#3B82F6"
+                favorite:
+                  type: boolean
+                  default: false
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/Category"
+        "409":
+          description: A category with this name already exists for this user
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /categories/{id}:
+    get:
+      tags: [Categories]
+      summary: Get a single category
+      operationId: getCategory
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Category details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/Category"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Categories]
+      summary: Update a category
+      operationId: updateCategory
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 255
+                color:
+                  type: string
+                  pattern: "^#[0-9a-fA-F]{6}$"
+                favorite:
+                  type: boolean
+      responses:
+        "200":
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/Category"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Categories]
+      summary: Delete a category
+      operationId: deleteCategory
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Category deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  #  PROJECTS
+  # ──────────────────────────────────────────────────────────────────────────
+
+  /projects:
+    get:
+      tags: [Projects]
+      summary: List all projects for the authenticated user
+      operationId: listProjects
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+        - $ref: "#/components/parameters/sort"
+      responses:
+        "200":
+          description: Paginated list of projects
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessBody"
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Project"
+    post:
+      tags: [Projects]
+      summary: Create a new project
+      operationId: createProject
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 255
+                description:
+                  type: string
+                  nullable: true
+                color:
+                  type: string
+                  pattern: "^#[0-9a-fA-F]{6}$"
+                  default: "#8B5CF6"
+                  example: "#8B5CF6"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/Project"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /projects/{id}:
+    get:
+      tags: [Projects]
+      summary: Get a single project
+      operationId: getProject
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/Project"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Projects]
+      summary: Update a project
+      operationId: updateProject
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 255
+                description:
+                  type: string
+                  nullable: true
+                color:
+                  type: string
+                  pattern: "^#[0-9a-fA-F]{6}$"
+      responses:
+        "200":
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/Project"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Projects]
+      summary: Delete a project
+      operationId: deleteProject
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  #  TODOS
+  # ──────────────────────────────────────────────────────────────────────────
+
+  /todos:
+    get:
+      tags: [Todos]
+      summary: List todos with pagination, sorting, and filtering
+      operationId: listTodos
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+        - $ref: "#/components/parameters/sort"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, in_progress, completed, archived]
+          description: Filter by status
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: sync_enabled
+          in: query
+          schema:
+            type: boolean
+        - name: reminder_enabled
+          in: query
+          schema:
+            type: boolean
+        - name: recurring_enabled
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Paginated list of todos (with linked categories)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessBody"
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Todo"
+    post:
+      tags: [Todos]
+      summary: Create a new todo
+      operationId: createTodo
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  maxLength: 255
+                description:
+                  type: string
+                  nullable: true
+                status:
+                  type: string
+                  enum: [open, in_progress, completed, archived]
+                  default: open
+                due_date:
+                  type: string
+                  format: date
+                  nullable: true
+                  example: "2025-01-15"
+                due_time:
+                  type: string
+                  format: partial-time
+                  nullable: true
+                  example: "10:30:00"
+                sync_enabled:
+                  type: boolean
+                  default: true
+                reminder_enabled:
+                  type: boolean
+                  default: false
+                recurring_enabled:
+                  type: boolean
+                  default: false
+                project_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                category_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: >
+                    Optional — link an existing category on creation
+      responses:
+        "201":
+          description: Todo created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/Todo"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /todos/{id}:
+    get:
+      tags: [Todos]
+      summary: Get a single todo
+      operationId: getTodo
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Todo details (with linked categories)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/Todo"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Todos]
+      summary: Update a todo
+      operationId: updateTodo
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 255
+                description:
+                  type: string
+                  nullable: true
+                status:
+                  type: string
+                  enum: [open, in_progress, completed, archived]
+                due_date:
+                  type: string
+                  format: date
+                  nullable: true
+                due_time:
+                  type: string
+                  format: partial-time
+                  nullable: true
+                sync_enabled:
+                  type: boolean
+                reminder_enabled:
+                  type: boolean
+                recurring_enabled:
+                  type: boolean
+                project_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                category_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: >
+                    Replaces all category links with the given category
+      responses:
+        "200":
+          description: Todo updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/Todo"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Todos]
+      summary: Delete a todo
+      operationId: deleteTodo
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Todo deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /todos/{id}/categories:
+    post:
+      tags: [Todos]
+      summary: Link a category to a todo
+      operationId: addTodoCategory
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Todo UUID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category_id]
+              properties:
+                category_id:
+                  type: string
+                  format: uuid
+      responses:
+        "201":
+          description: Category linked to todo
+        "409":
+          description: Category already linked
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /todos/{id}/categories/{categoryId}:
+    delete:
+      tags: [Todos]
+      summary: Remove a category link from a todo
+      operationId: removeTodoCategory
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Todo UUID
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Category UUID
+      responses:
+        "200":
+          description: Category removed from todo
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  #  RECURRING TASKS
+  # ──────────────────────────────────────────────────────────────────────────
+
+  /recurring-tasks:
+    get:
+      tags: [Recurring Tasks]
+      summary: List all recurring tasks
+      operationId: listRecurringTasks
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+        - $ref: "#/components/parameters/sort"
+        - name: schedule
+          in: query
+          schema:
+            type: string
+            enum: [daily, weekly, monthly, custom]
+        - name: favorite
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Paginated list of recurring tasks
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessBody"
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/RecurringTask"
+    post:
+      tags: [Recurring Tasks]
+      summary: Create a recurring task
+      operationId: createRecurringTask
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  maxLength: 255
+                description:
+                  type: string
+                  nullable: true
+                schedule:
+                  type: string
+                  enum: [daily, weekly, monthly, custom]
+                  default: weekly
+                custom_days:
+                  type: array
+                  items:
+                    type: string
+                    enum: [mon, tue, wed, thu, fri, sat, sun]
+                  description: Active only when schedule=custom
+                  example: [mon, wed, fri]
+                favorite:
+                  type: boolean
+                  default: false
+                category_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "201":
+          description: Recurring task created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/RecurringTask"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /recurring-tasks/{id}:
+    get:
+      tags: [Recurring Tasks]
+      summary: Get a single recurring task
+      operationId: getRecurringTask
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Recurring task details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/RecurringTask"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Recurring Tasks]
+      summary: Update a recurring task
+      operationId: updateRecurringTask
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 255
+                description:
+                  type: string
+                  nullable: true
+                schedule:
+                  type: string
+                  enum: [daily, weekly, monthly, custom]
+                custom_days:
+                  type: array
+                  items:
+                    type: string
+                    enum: [mon, tue, wed, thu, fri, sat, sun]
+                favorite:
+                  type: boolean
+                category_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: Replaces all category links
+      responses:
+        "200":
+          description: Recurring task updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/RecurringTask"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Recurring Tasks]
+      summary: Delete a recurring task
+      operationId: deleteRecurringTask
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Recurring task deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /recurring-tasks/{id}/categories:
+    post:
+      tags: [Recurring Tasks]
+      summary: Link a category to a recurring task
+      operationId: addRecurringTaskCategory
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category_id]
+              properties:
+                category_id:
+                  type: string
+                  format: uuid
+      responses:
+        "201":
+          description: Category linked
+        "409":
+          description: Already linked
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /recurring-tasks/{id}/categories/{categoryId}:
+    delete:
+      tags: [Recurring Tasks]
+      summary: Remove a category link from a recurring task
+      operationId: removeRecurringTaskCategory
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Category removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  #  ACTIVITY LOGS
+  # ──────────────────────────────────────────────────────────────────────────
+
+  /activity-logs:
+    get:
+      tags: [Activity Logs]
+      summary: List recent activity logs for the authenticated user
+      operationId: listActivityLogs
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+          description: Maximum number of log entries to return
+      responses:
+        "200":
+          description: List of activity log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ActivityLog"
+
+  /activity-logs/{id}:
+    get:
+      tags: [Activity Logs]
+      summary: Get a single activity log entry
+      operationId: getActivityLog
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Activity log entry
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/ActivityLog"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  #  USER THEMES
+  # ──────────────────────────────────────────────────────────────────────────
+
+  /user/themes:
+    get:
+      tags: [User Themes]
+      summary: List themes installed by the authenticated user
+      operationId: listUserThemes
+      security:
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: List of user themes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/UserTheme"
+    post:
+      tags: [User Themes]
+      summary: Install a theme for the user
+      operationId: createUserTheme
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [theme_id]
+              properties:
+                theme_id:
+                  type: string
+                  format: uuid
+                is_active:
+                  type: boolean
+                  default: false
+                custom_settings:
+                  type: object
+                  description: Theme variable overrides
+                  properties:
+                    primary_color:
+                      type: string
+                      example: "#3B82F6"
+                    font_size:
+                      type: string
+                      example: medium
+      responses:
+        "201":
+          description: Theme installed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/UserTheme"
+
+  /user/themes/{id}:
+    put:
+      tags: [User Themes]
+      summary: Update a user's theme settings
+      operationId: updateUserTheme
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_active:
+                  type: boolean
+                custom_settings:
+                  type: object
+      responses:
+        "200":
+          description: Theme updated
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [User Themes]
+      summary: Uninstall a user theme
+      operationId: deleteUserTheme
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Theme uninstalled
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  #  CORS PREFLIGHT
+  # ──────────────────────────────────────────────────────────────────────────
+  /{any}:
+    options:
+      tags: [CORS]
+      summary: CORS preflight handler
+      description: Handles OPTIONS preflight requests for all API routes.
+      parameters:
+        - name: any
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: CORS headers set, no body
+
+# ============================================================================
+#  COMPONENTS
+# ============================================================================
+
+components:
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: >
+        API key obtained from `/auth/register`, `/auth/login`, or
+        `/user/api-keys`. Include it as `X-API-Key: todo_xxxxx`.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        JWT token obtained from `/auth/jwt/login` or `/auth/jwt/register`.
+        Include it as `Authorization: Bearer <token>`.
+
+  parameters:
+    page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Page number for pagination
+    per_page:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+      description: Items per page
+    sort:
+      name: sort
+      in: query
+      schema:
+        type: string
+      description: >
+        Sort fields with optional `-` prefix for descending order.
+        Comma-separated: `sort=title,-created_at`
+
+  requestBodies:
+    UserRegistration:
+      description: User registration payload
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [email, password, name]
+            properties:
+              email:
+                type: string
+                format: email
+              password:
+                type: string
+                format: password
+                minLength: 8
+              name:
+                type: string
+                maxLength: 255
+              avatar_url:
+                type: string
+                format: uri
+                nullable: true
+              settings:
+                type: object
+                properties:
+                  theme:
+                    type: string
+                    example: dark
+                  language:
+                    type: string
+                    example: en
+
+  responses:
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                enum: [false]
+              message:
+                type: string
+                example: Validation failed
+              errors:
+                type: object
+                additionalProperties:
+                  type: string
+                example:
+                  email: The Email field must contain a unique value.
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Unauthorized
+              message:
+                type: string
+                example: Invalid or expired API key
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+
+  schemas:
+    # ── Base envelope ──────────────────────────────────────────────────────
+    SuccessBody:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+    ErrorBody:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: string
+
+    PaginatedResponse:
+      type: object
+      properties:
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+            per_page:
+              type: integer
+            total:
+              type: integer
+            last_page:
+              type: integer
+            has_more:
+              type: boolean
+
+    # ── User ────────────────────────────────────────────────────────────────
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        avatar_url:
+          type: string
+          format: uri
+          nullable: true
+        settings:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      example:
+        id: "550e8400-e29b-41d4-a716-446655440000"
+        email: user@example.com
+        name: John Doe
+        avatar_url: null
+        settings:
+          theme: dark
+          language: en
+        created_at: "2025-01-01 00:00:00"
+        updated_at: "2025-01-01 00:00:00"
+
+    # ── API Keys ───────────────────────────────────────────────────────────
+    ApiKeyCreated:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          type: string
+          description: Full API key value (only shown once)
+          example: "todo_abc123def456..."
+        prefix:
+          type: string
+          example: "todo_abc1"
+        name:
+          type: string
+          example: "My App Key"
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [read, write]
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ApiKeyMetadata:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        key_prefix:
+          type: string
+          example: "todo_abc1"
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        is_active:
+          type: boolean
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Category ────────────────────────────────────────────────────────────
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          type: string
+          pattern: "^#[0-9a-fA-F]{6}$"
+          example: "#3B82F6"
+        favorite:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Project ────────────────────────────────────────────────────────────
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        color:
+          type: string
+          pattern: "^#[0-9a-fA-F]{6}$"
+          example: "#8B5CF6"
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Todo ────────────────────────────────────────────────────────────────
+    Todo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [open, in_progress, completed, archived]
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        due_time:
+          type: string
+          format: partial-time
+          nullable: true
+        sync_enabled:
+          type: boolean
+        reminder_enabled:
+          type: boolean
+        recurring_enabled:
+          type: boolean
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/LinkedCategory"
+      example:
+        id: "660e8400-e29b-41d4-a716-446655440001"
+        user_id: "550e8400-e29b-41d4-a716-446655440000"
+        title: "Complete task"
+        description: "Task description"
+        status: open
+        due_date: "2025-01-15"
+        due_time: "10:30:00"
+        sync_enabled: true
+        reminder_enabled: false
+        recurring_enabled: false
+        project_id: "770e8400-e29b-41d4-a716-446655440002"
+        created_at: "2025-01-01 00:00:00"
+        updated_at: "2025-01-01 00:00:00"
+        categories:
+          - id: "880e8400-e29b-41d4-a716-446655440003"
+            name: "Work"
+            color: "#3B82F6"
+
+    LinkedCategory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          type: string
+          pattern: "^#[0-9a-fA-F]{6}$"
+
+    # ── Recurring Task ──────────────────────────────────────────────────────
+    RecurringTask:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        schedule:
+          type: string
+          enum: [daily, weekly, monthly, custom]
+        custom_days:
+          type: array
+          items:
+            type: string
+        favorite:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/LinkedCategory"
+
+    # ── Activity Log ───────────────────────────────────────────────────────
+    ActivityLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+          nullable: true
+        action:
+          type: string
+          example: "todo_created"
+        entity_type:
+          type: string
+          example: "todo"
+        entity_id:
+          type: string
+          format: uuid
+          nullable: true
+        details:
+          type: object
+          nullable: true
+          example:
+            title: "New Task"
+        ip_address:
+          type: string
+          example: "127.0.0.1"
+        user_agent:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    # ── Marketplace Theme ──────────────────────────────────────────────────
+    MarketplaceTheme:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        author:
+          type: string
+          nullable: true
+        version:
+          type: string
+        thumbnail_url:
+          type: string
+          format: uri
+          nullable: true
+        price:
+          type: number
+          format: decimal
+          example: 0
+        is_free:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ── User Theme ─────────────────────────────────────────────────────────
+    UserTheme:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        theme_id:
+          type: string
+          format: uuid
+        is_active:
+          type: boolean
+        custom_settings:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
