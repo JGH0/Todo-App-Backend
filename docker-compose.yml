@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Docker Compose for Todo App Stack
+#
+# Services:
+#   backend   – PHP 8.2 Apache running the CodeIgniter REST API
+#   frontend  – Nginx serving the Vue.js SPA
+#   db        – MariaDB database
+#
+# Source repos (auto-pulled on container start):
+#   https://github.com/JGH0/Todo-App-Backend/
+#   https://github.com/JGH0/Todo-App/
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Database ────────────────────────────────────────────────────────────────
+  db:
+    image: mariadb:11
+    container_name: todo-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ""
+      MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "yes"
+      MARIADB_DATABASE: TodoApp
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./docker/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Backend (PHP / CodeIgniter API) ─────────────────────────────────────────
+  backend:
+    build:
+      context: ./docker/backend
+      dockerfile: Dockerfile
+    container_name: todo-backend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      # Database connection – the backend .env is auto-generated from these
+      DB_HOSTNAME: db
+      DB_DATABASE: TodoApp
+      DB_USERNAME: root
+      DB_PASSWORD: ""
+      DB_PORT: "3306"
+      # Repo URL for auto-pull
+      BACKEND_REPO: "https://github.com/JGH0/Todo-App-Backend.git"
+    volumes:
+      - backend_code:/var/www/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ── Frontend (Vue.js SPA) ───────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./docker/frontend
+      dockerfile: Dockerfile
+      args:
+        # Build-time: repo URL for cloning, API base for Vite build
+        FRONTEND_REPO: "https://github.com/JGH0/Todo-App.git"
+        VITE_API_BASE_URL: "http://localhost:8080"
+    container_name: todo-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
+  backend_code:
