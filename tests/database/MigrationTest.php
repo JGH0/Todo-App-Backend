@@ -1,39 +1,71 @@
 <?php
 
-use CodeIgniter\Test\CIUnitTestCase;
-use CodeIgniter\Test\DatabaseTestTrait;
+use PHPUnit\Framework\TestCase;
 
 /**
- * MigrationTest - Tests für Datenbankmigrationen
- * Verifiziert dass alle Migrationen korrekt ausgeführt werden
- * und die Tabellen mit korrekten Spalten erstellt werden
- * 
+ * MigrationTest - Tests for database migrations
+ *
+ * Uses plain PHPUnit TestCase + direct mysqli to avoid CI4 test
+ * infrastructure interfering with the real database.
+ *
  * @internal
  */
-final class MigrationTest extends CIUnitTestCase
+final class MigrationTest extends TestCase
 {
-    use DatabaseTestTrait;
+    private \mysqli $mysqli;
 
-    /**
-     * Test: Users Tabelle existiert
-     */
-    public function testUsersTableExists(): void
+    protected function setUp(): void
     {
-        $db = \Config\Database::connect();
-        $this->assertTrue($db->tableExists('users'));
+        parent::setUp();
+
+        $this->mysqli = new \mysqli('127.0.0.1', 'root', '', 'TodoApp', 3306);
+
+        if ($this->mysqli->connect_error) {
+            $this->fail('MySQL connection failed: ' . $this->mysqli->connect_error);
+        }
     }
 
-    /**
-     * Test: Users Tabelle hat erforderliche Spalten
-     */
+    protected function tearDown(): void
+    {
+        $this->mysqli->close();
+        parent::tearDown();
+    }
+
+    private function generateUuid(): string
+    {
+        return sprintf(
+            '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+        );
+    }
+
+    public function testDatabaseConnectionWorks(): void
+    {
+        $result = $this->mysqli->query('SELECT 1 AS test');
+        $this->assertNotFalse($result);
+        $row = $result->fetch_assoc();
+        $this->assertSame('1', $row['test']);
+    }
+
+    public function testUsersTableExists(): void
+    {
+        $result = $this->mysqli->query("SHOW TABLES LIKE 'users'");
+        $this->assertGreaterThan(0, $result->num_rows);
+    }
+
     public function testUsersTableHasRequiredColumns(): void
     {
-        $db = \Config\Database::connect();
-        $fields = $db->getFieldData('users');
+        $result = $this->mysqli->query('DESCRIBE users');
+        $this->assertNotFalse($result);
 
-        $fieldNames = array_map(function ($field) {
-            return $field->name;
-        }, $fields);
+        $fieldNames = [];
+        while ($row = $result->fetch_assoc()) {
+            $fieldNames[] = $row['Field'];
+        }
 
         $this->assertContains('id', $fieldNames);
         $this->assertContains('email', $fieldNames);
@@ -45,151 +77,118 @@ final class MigrationTest extends CIUnitTestCase
         $this->assertContains('updated_at', $fieldNames);
     }
 
-    /**
-     * Test: Email Spalte ist unique
-     */
     public function testEmailIsUnique(): void
     {
-        $db = \Config\Database::connect();
-        $builder = $db->table('users');
+        $email = 'migration-unique-' . uniqid() . '@example.com';
+        $id1 = $this->generateUuid();
 
-        // Insert erstes Datensatz
-        $builder->insert([
-            'id' => 'unique-test-1',
-            'email' => 'unique@example.com',
-            'password_hash' => 'hash1',
-            'name' => 'Test One',
-        ]);
+        $this->mysqli->query("INSERT INTO users (id, email, password_hash, name) VALUES ('{$id1}', '{$email}', 'hash1', 'Test One')");
 
-        // Versuche zweites Datensatz mit gleicher Email zu inserten
+        $id2 = $this->generateUuid();
+
+        // PHP 8 throws mysqli_sql_exception on duplicate key;
+        // catch it and verify the error code.
+        $caught = false;
         try {
-            $builder->insert([
-                'id' => 'unique-test-2',
-                'email' => 'unique@example.com',
-                'password_hash' => 'hash2',
-                'name' => 'Test Two',
-            ]);
-            // Falls kein Error, gibt es ein Problem
-            $this->fail('Unique constraint wurde nicht erzwungen');
-        } catch (\Exception $e) {
-            // Expected - unique constraint wurde erzwungen
-            $this->assertTrue(true);
+            $this->mysqli->query("INSERT INTO users (id, email, password_hash, name) VALUES ('{$id2}', '{$email}', 'hash2', 'Test Two')");
+        } catch (\mysqli_sql_exception $e) {
+            $caught = true;
+            $this->assertSame(1062, $e->getCode(), 'Expected MySQL error 1062 (duplicate entry)');
         }
+
+        $this->assertTrue($caught, 'Expected duplicate email to throw an exception');
+
+        $this->mysqli->query("DELETE FROM users WHERE email = '{$email}'");
     }
 
-    /**
-     * Test: Categories Tabelle existiert
-     */
     public function testCategoriesTableExists(): void
     {
-        $db = \Config\Database::connect();
-        $this->assertTrue($db->tableExists('categories'));
+        $result = $this->mysqli->query("SHOW TABLES LIKE 'categories'");
+        $this->assertGreaterThan(0, $result->num_rows);
     }
 
-    /**
-     * Test: Projects Tabelle existiert
-     */
     public function testProjectsTableExists(): void
     {
-        $db = \Config\Database::connect();
-        $this->assertTrue($db->tableExists('projects'));
+        $result = $this->mysqli->query("SHOW TABLES LIKE 'projects'");
+        $this->assertGreaterThan(0, $result->num_rows);
     }
 
-    /**
-     * Test: Todos Tabelle existiert
-     */
     public function testTodosTableExists(): void
     {
-        $db = \Config\Database::connect();
-        $this->assertTrue($db->tableExists('todos'));
+        $result = $this->mysqli->query("SHOW TABLES LIKE 'todos'");
+        $this->assertGreaterThan(0, $result->num_rows);
     }
 
-    /**
-     * Test: TodoCategories Tabelle existiert
-     */
     public function testTodoCategoriesTableExists(): void
     {
-        $db = \Config\Database::connect();
-        $this->assertTrue($db->tableExists('todo_categories'));
+        $result = $this->mysqli->query("SHOW TABLES LIKE 'todo_categories'");
+        $this->assertGreaterThan(0, $result->num_rows);
     }
 
-    /**
-     * Test: Todos Tabelle hat erforderliche Spalten
-     */
     public function testTodosTableHasRequiredColumns(): void
     {
-        $db = \Config\Database::connect();
-        $fields = $db->getFieldData('todos');
+        $result = $this->mysqli->query('DESCRIBE todos');
+        $this->assertNotFalse($result);
 
-        $fieldNames = array_map(function ($field) {
-            return $field->name;
-        }, $fields);
+        $fieldNames = [];
+        while ($row = $result->fetch_assoc()) {
+            $fieldNames[] = $row['Field'];
+        }
 
-        // Diese Spalten sollten mindestens existieren
         $this->assertContains('id', $fieldNames);
-        // Weitere Standard-Spalten...
+        $this->assertContains('title', $fieldNames);
+        $this->assertContains('description', $fieldNames);
+        $this->assertContains('status', $fieldNames);
+        $this->assertContains('user_id', $fieldNames);
     }
 
-    /**
-     * Test: Datenbank Verbindung funktioniert
-     */
-    public function testDatabaseConnectionWorks(): void
-    {
-        $db = \Config\Database::connect();
-        $this->assertNotNull($db);
-    }
-
-    /**
-     * Test: Schema wird nicht über Migration hinaus modifiziert
-     */
     public function testTableCountIsCorrect(): void
     {
-        $db = \Config\Database::connect();
-        
-        // Abrufen aller Tabellen
-        $tables = $db->listTables();
+        $result = $this->mysqli->query('SHOW TABLES');
+        $this->assertNotFalse($result);
 
-        // Sollte mindestens diese Tabellen haben
+        $tables = [];
+        while ($row = $result->fetch_array()) {
+            $tables[] = $row[0];
+        }
+
         $requiredTables = ['users', 'categories', 'projects', 'todos', 'todo_categories'];
-        
+
         foreach ($requiredTables as $table) {
-            $this->assertContains($table, $tables, "Tabelle '{$table}' existiert nicht");
+            $this->assertContains($table, $tables, "Table '{$table}' does not exist");
         }
     }
 
-    /**
-     * Test: Users settings Spalte ist JSON
-     */
     public function testUserSettingsIsJson(): void
     {
-        $db = \Config\Database::connect();
-        $fields = $db->getFieldData('users');
+        $result = $this->mysqli->query('DESCRIBE users');
+        $this->assertNotFalse($result);
 
-        $settingsField = null;
-        foreach ($fields as $field) {
-            if ($field->name === 'settings') {
-                $settingsField = $field;
+        $settingsType = '';
+        while ($row = $result->fetch_assoc()) {
+            if ($row['Field'] === 'settings') {
+                $settingsType = $row['Type'];
                 break;
             }
         }
 
-        $this->assertNotNull($settingsField);
-        // Type sollte JSON-ähnlich sein
-        $this->assertStringContainsString('json', strtolower($settingsField->type));
+        $this->assertNotEmpty($settingsType, 'settings column should exist');
+
+        // MariaDB may report JSON columns as "longtext", MySQL as "json"
+        $valid = str_contains(strtolower($settingsType), 'json')
+              || str_contains(strtolower($settingsType), 'longtext');
+        $this->assertTrue($valid, "Expected JSON or LONGTEXT type, got '{$settingsType}'");
     }
 
-    /**
-     * Test: Timestamps sind in correct format
-     */
     public function testTimestampsAreCorrectType(): void
     {
-        $db = \Config\Database::connect();
-        $fields = $db->getFieldData('users');
+        $result = $this->mysqli->query('DESCRIBE users');
+        $this->assertNotFalse($result);
 
         $dateFields = [];
-        foreach ($fields as $field) {
-            if (in_array($field->name, ['created_at', 'updated_at'])) {
-                $dateFields[] = $field;
+        while ($row = $result->fetch_assoc()) {
+            if (in_array($row['Field'], ['created_at', 'updated_at'])) {
+                $dateFields[] = $row;
             }
         }
 

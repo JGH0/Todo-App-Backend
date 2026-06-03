@@ -1,7 +1,6 @@
 <?php
 
-use CodeIgniter\Test\CIUnitTestCase;
-use CodeIgniter\Test\DatabaseTestTrait;
+use PHPUnit\Framework\TestCase;
 use App\Models\TodoModel;
 use App\Models\CategoryModel;
 use App\Models\ProjectModel;
@@ -13,14 +12,14 @@ use App\Models\UserModel;
  * Tests the Todo App Backend models directly.
  * Requires a working MySQL database with migrations applied.
  *
+ * Uses plain PHPUnit TestCase to avoid CI4 test infrastructure
+ * interfering with the real database.
+ *
  * @internal
  */
-final class ModelTest extends CIUnitTestCase
+final class ModelTest extends TestCase
 {
-    use DatabaseTestTrait;
-
-    protected $migrate = false;
-    protected $refresh = false;
+    private \mysqli $mysqli;
 
     private static string $userId     = '';
     private static string $todoId     = '';
@@ -31,7 +30,8 @@ final class ModelTest extends CIUnitTestCase
     {
         parent::setUpBeforeClass();
 
-        // Pick the first real user from the database
+        // CI4 bootstrap is already loaded via phpunit.xml.dist
+
         $userModel = new UserModel();
         $user = $userModel->first();
 
@@ -44,9 +44,31 @@ final class ModelTest extends CIUnitTestCase
     {
         parent::setUp();
 
+        $this->mysqli = new \mysqli('127.0.0.1', 'root', '', 'TodoApp', 3306);
+
+        if ($this->mysqli->connect_error) {
+            $this->fail('MySQL connection failed: ' . $this->mysqli->connect_error);
+        }
+
         if (empty(self::$userId)) {
             $this->markTestSkipped('No users in database. Run migrations and register a user first.');
         }
+    }
+
+    protected function tearDown(): void
+    {
+        if (!empty(self::$todoId)) {
+            $this->mysqli->query("DELETE FROM todos WHERE id = '" . self::$todoId . "'");
+        }
+        if (!empty(self::$categoryId)) {
+            $this->mysqli->query("DELETE FROM categories WHERE id = '" . self::$categoryId . "'");
+        }
+        if (!empty(self::$projectId)) {
+            $this->mysqli->query("DELETE FROM projects WHERE id = '" . self::$projectId . "'");
+        }
+
+        $this->mysqli->close();
+        parent::tearDown();
     }
 
     // ========================================================================
@@ -57,8 +79,9 @@ final class ModelTest extends CIUnitTestCase
     {
         $model = new TodoModel();
 
+        $id = $this->uuid();
         $data = [
-            'id'       => $this->uuid(),
+            'id'       => $id,
             'user_id'  => self::$userId,
             'title'    => 'Test todo',
             'status'   => 'open',
@@ -67,9 +90,9 @@ final class ModelTest extends CIUnitTestCase
 
         $this->assertNotFalse($model->insert($data), 'Todo insert should succeed');
 
-        self::$todoId = $data['id'];
+        self::$todoId = $id;
 
-        $found = $model->find($data['id']);
+        $found = $model->find($id);
         $this->assertNotNull($found, 'Todo should be findable');
         $this->assertSame('Test todo', $found['title']);
     }
@@ -91,9 +114,7 @@ final class ModelTest extends CIUnitTestCase
     {
         $model = new TodoModel();
 
-        $updated = $model->update(self::$todoId, [
-            'status' => 'completed',
-        ]);
+        $updated = $model->update(self::$todoId, ['status' => 'completed']);
 
         $this->assertNotFalse($updated);
 
@@ -127,8 +148,9 @@ final class ModelTest extends CIUnitTestCase
     {
         $model = new CategoryModel();
 
+        $id = $this->uuid();
         $data = [
-            'id'      => $this->uuid(),
+            'id'      => $id,
             'user_id' => self::$userId,
             'name'    => 'Work',
             'color'   => '#3B82F6',
@@ -136,9 +158,9 @@ final class ModelTest extends CIUnitTestCase
 
         $this->assertNotFalse($model->insert($data));
 
-        self::$categoryId = $data['id'];
+        self::$categoryId = $id;
 
-        $found = $model->find($data['id']);
+        $found = $model->find($id);
         $this->assertNotNull($found);
         $this->assertSame('Work', $found['name']);
         $this->assertSame('#3B82F6', $found['color']);
@@ -197,8 +219,9 @@ final class ModelTest extends CIUnitTestCase
     {
         $model = new ProjectModel();
 
+        $id = $this->uuid();
         $data = [
-            'id'      => $this->uuid(),
+            'id'      => $id,
             'user_id' => self::$userId,
             'name'    => 'Test Project',
             'color'   => '#8B5CF6',
@@ -206,9 +229,9 @@ final class ModelTest extends CIUnitTestCase
 
         $this->assertNotFalse($model->insert($data));
 
-        self::$projectId = $data['id'];
+        self::$projectId = $id;
 
-        $found = $model->find($data['id']);
+        $found = $model->find($id);
         $this->assertNotNull($found);
         $this->assertSame('Test Project', $found['name']);
     }

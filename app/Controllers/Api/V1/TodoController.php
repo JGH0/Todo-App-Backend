@@ -67,9 +67,7 @@ class TodoController extends BaseController
     {
         $userId = $this->getUserId();
 
-        if (!$this->validateWithModel($this->todoModel)) {
-            return;
-        }
+        $__val = $this->validateWithModel($this->todoModel); if ($__val !== true) { return $__val; }
 
         $json = $this->request->getJSON(true);
 
@@ -201,9 +199,7 @@ class TodoController extends BaseController
         $json   = $this->request->getJSON(true);
 
         $rules = ['category_id' => 'required'];
-        if (!$this->validateRequest($rules)) {
-            return;
-        }
+        $__val = $this->validateRequest($rules); if ($__val !== true) { return $__val; }
 
         $todo = $this->todoModel->where('id', $todoId)->where('user_id', $userId)->first();
         if (!$todo) {

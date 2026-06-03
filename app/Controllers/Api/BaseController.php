@@ -212,7 +212,7 @@ class BaseController extends ResourceController
      *
      * Returns true on success, sends a 422 JSON response and returns false on failure.
      */
-    protected function validateWithModel(\CodeIgniter\Model $model): bool
+    protected function validateWithModel(\CodeIgniter\Model $model): bool|\CodeIgniter\HTTP\ResponseInterface
     {
         $validation = \Config\Services::validation();
         $rules      = $model->getValidationRules();
@@ -225,8 +225,7 @@ class BaseController extends ResourceController
         $validation->setRules($rules, $errors);
 
         if (!$validation->withRequest($this->request)->run()) {
-            $this->errorResponse('Validation failed', 422, $validation->getErrors());
-            return false;
+            return $this->errorResponse('Validation failed', 422, $validation->getErrors());
         }
 
         return true;
@@ -235,21 +234,37 @@ class BaseController extends ResourceController
     /**
      * Legacy simple validation for controllers that define rules inline.
      */
-    protected function validateRequest(array $rules): bool
+    /**
+     * Validate request data against the given rules.
+     *
+     * @param array $rules Field => rule definition (same format as CI4 validation rules)
+     *
+     * @return bool|\CodeIgniter\HTTP\ResponseInterface Returns true on success,
+     *   or a ResponseInterface with validation error details on failure.
+     */
+    protected function validateRequest(array $rules): bool|\CodeIgniter\HTTP\ResponseInterface
     {
         $validation = \Config\Services::validation();
 
+        // Build all rules first, then set them in one call
+        $allRules  = [];
+        $allErrors = [];
+
         foreach ($rules as $field => $rule) {
             if (is_array($rule) && isset($rule['rules'])) {
-                $validation->setRules([$field => $rule['rules']], $rule['errors'] ?? []);
+                $allRules[$field]  = $rule['rules'];
+                $allErrors[$field] = $rule['errors'] ?? [];
             } else {
-                $validation->setRule($field, $field, $rule);
+                $allRules[$field] = $rule;
             }
         }
 
+        if ($allRules !== []) {
+            $validation->setRules($allRules, $allErrors);
+        }
+
         if (!$validation->withRequest($this->request)->run()) {
-            $this->errorResponse('Validation failed', 422, $validation->getErrors());
-            return false;
+            return $this->errorResponse('Validation failed', 422, $validation->getErrors());
         }
 
         return true;

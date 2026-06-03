@@ -63,9 +63,7 @@ class AuthController extends BaseController
             ],
         ];
 
-        if (!$this->validateRequest($rules)) {
-            return;
-        }
+        $__val = $this->validateRequest($rules); if ($__val !== true) { return $__val; }
 
         try {
             // Generate UUID for user
@@ -121,9 +119,7 @@ class AuthController extends BaseController
             'password' => 'required',
         ];
 
-        if (!$this->validateRequest($rules)) {
-            return;
-        }
+        $__val = $this->validateRequest($rules); if ($__val !== true) { return $__val; }
 
         try {
             // Authenticate user
@@ -189,9 +185,7 @@ class AuthController extends BaseController
             'password' => 'required|min_length[6]',
         ];
 
-        if (!$this->validateRequest($rules)) {
-            return;
-        }
+        $__val = $this->validateRequest($rules); if ($__val !== true) { return $__val; }
 
         // Authenticate user
         $user = $this->userModel->where('email', $json['email'])->first();
@@ -259,9 +253,7 @@ class AuthController extends BaseController
             ],
         ];
 
-        if (!$this->validateRequest($rules)) {
-            return;
-        }
+        $__val = $this->validateRequest($rules); if ($__val !== true) { return $__val; }
 
         try {
             $userId = $this->generateUuid();
@@ -319,9 +311,7 @@ class AuthController extends BaseController
             'password' => 'required',
         ];
 
-        if (!$this->validateRequest($rules)) {
-            return;
-        }
+        $__val = $this->validateRequest($rules); if ($__val !== true) { return $__val; }
 
         try {
             $user = $this->userModel->where('email', $json['email'])->first();

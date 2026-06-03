@@ -55,9 +55,7 @@ class RecurringTaskController extends BaseController
     {
         $userId = $this->getUserId();
 
-        if (!$this->validateWithModel($this->recurringTaskModel)) {
-            return;
-        }
+        $__val = $this->validateWithModel($this->recurringTaskModel); if ($__val !== true) { return $__val; }
 
         $json = $this->request->getJSON(true);
 
@@ -178,9 +176,7 @@ class RecurringTaskController extends BaseController
         $json   = $this->request->getJSON(true);
 
         $rules = ['category_id' => 'required'];
-        if (!$this->validateRequest($rules)) {
-            return;
-        }
+        $__val = $this->validateRequest($rules); if ($__val !== true) { return $__val; }
 
         $task = $this->recurringTaskModel->where('id', $taskId)->where('user_id', $userId)->first();
         if (!$task) {

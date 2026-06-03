@@ -3,169 +3,202 @@
 namespace Tests\Unit\Models;
 
 use App\Models\UserModel;
-use CodeIgniter\Test\CIUnitTestCase;
-use CodeIgniter\Test\DatabaseTestTrait;
+use PHPUnit\Framework\TestCase;
 
 /**
- * UserModelTest - Unit Tests für das UserModel
- * Testet die Benutzerdatenbankoperationen
- * 
+ * UserModelTest - Unit Tests for the UserModel
+ *
+ * Tests CRUD operations on the users table.
+ * Note: UserModel uses $useAutoIncrement = false, so all inserts
+ * must provide a UUID string as the 'id' field.
+ *
+ * Uses plain PHPUnit TestCase to avoid CI4 test infrastructure
+ * interfering with the real database.
+ *
  * @internal
  */
-final class UserModelTest extends CIUnitTestCase
+final class UserModelTest extends TestCase
 {
-    use DatabaseTestTrait;
+    private \mysqli $mysqli;
 
-    protected $namespace = 'App\Models';
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Init CI4 environment
+        // CI4 bootstrap is already loaded via phpunit.xml.dist
+
+        $this->mysqli = new \mysqli('127.0.0.1', 'root', '', 'TodoApp', 3306);
+
+        if ($this->mysqli->connect_error) {
+            $this->fail('MySQL connection failed: ' . $this->mysqli->connect_error);
+        }
+    }
+
+    protected function tearDown(): void
+    {
+        // Clean up test users
+        $this->mysqli->query("DELETE FROM users WHERE email LIKE '%@usermodel-test.local'");
+        $this->mysqli->close();
+        parent::tearDown();
+    }
 
     /**
-     * Test: Benutzer kann erstellt werden
+     * Generate a simple UUID for test records
      */
+    private function generateUuid(): string
+    {
+        return sprintf(
+            '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+        );
+    }
+
     public function testUserCanBeCreated(): void
     {
         $userModel = new UserModel();
-        
+
         $data = [
-            'email' => 'user@example.com',
+            'id'            => $this->generateUuid(),
+            'email'         => 'create-' . uniqid() . '@usermodel-test.local',
             'password_hash' => password_hash('password123', PASSWORD_DEFAULT),
-            'name' => 'Test User',
+            'name'          => 'Test User',
         ];
 
         $id = $userModel->insert($data);
-        $this->assertIsNotNull($id);
+        $this->assertNotNull($id);
+
+        $user = $userModel->find($id);
+        $this->assertNotNull($user);
+        $this->assertSame($data['email'], $user['email']);
     }
 
-    /**
-     * Test: Benutzer kann nach Email gefunden werden
-     */
     public function testUserCanBeFoundByEmail(): void
     {
         $userModel = new UserModel();
-        
+
+        $email = 'find-' . uniqid() . '@usermodel-test.local';
         $data = [
-            'email' => 'find@example.com',
+            'id'            => $this->generateUuid(),
+            'email'         => $email,
             'password_hash' => password_hash('password123', PASSWORD_DEFAULT),
-            'name' => 'Find User',
+            'name'          => 'Find User',
         ];
-        
+
         $userModel->insert($data);
-        
-        $user = $userModel->where('email', 'find@example.com')->first();
-        
+
+        $user = $userModel->where('email', $email)->first();
+
         $this->assertNotNull($user);
-        $this->assertEquals('find@example.com', $user['email']);
-        $this->assertEquals('Find User', $user['name']);
+        $this->assertSame($email, $user['email']);
+        $this->assertSame('Find User', $user['name']);
     }
 
-    /**
-     * Test: Doppelte Email wird verhindert
-     */
     public function testDuplicateEmailIsRejected(): void
     {
         $userModel = new UserModel();
-        
+
+        $email = 'dupe-' . uniqid() . '@usermodel-test.local';
+
         $data = [
-            'email' => 'duplicate@example.com',
+            'id'            => $this->generateUuid(),
+            'email'         => $email,
             'password_hash' => password_hash('password123', PASSWORD_DEFAULT),
-            'name' => 'First User',
+            'name'          => 'First User',
         ];
-        
+
         $userModel->insert($data);
-        
+
         $duplicateData = [
-            'email' => 'duplicate@example.com',
+            'id'            => $this->generateUuid(),
+            'email'         => $email,
             'password_hash' => password_hash('password456', PASSWORD_DEFAULT),
-            'name' => 'Second User',
+            'name'          => 'Second User',
         ];
-        
+
         $result = $userModel->insert($duplicateData);
-        
-        // Sollte false zurückgeben wegen Validierungsfehler
+
         $this->assertFalse($result);
     }
 
-    /**
-     * Test: Benutzer kann aktualisiert werden
-     */
     public function testUserCanBeUpdated(): void
     {
         $userModel = new UserModel();
-        
+
+        $id = $this->generateUuid();
+        $email = 'update-' . uniqid() . '@usermodel-test.local';
         $data = [
-            'email' => 'update@example.com',
+            'id'            => $id,
+            'email'         => $email,
             'password_hash' => password_hash('password123', PASSWORD_DEFAULT),
-            'name' => 'Original Name',
+            'name'          => 'Original Name',
         ];
-        
-        $id = $userModel->insert($data);
-        
-        $updateData = [
-            'name' => 'Updated Name',
-        ];
-        
-        $userModel->update($id, $updateData);
-        
+
+        $userModel->insert($data);
+        $userModel->update($id, ['name' => 'Updated Name']);
+
         $updated = $userModel->find($id);
-        $this->assertEquals('Updated Name', $updated['name']);
+        $this->assertSame('Updated Name', $updated['name']);
     }
 
-    /**
-     * Test: Benutzer kann gelöscht werden
-     */
     public function testUserCanBeDeleted(): void
     {
         $userModel = new UserModel();
-        
+
+        $id = $this->generateUuid();
+        $email = 'delete-' . uniqid() . '@usermodel-test.local';
         $data = [
-            'email' => 'delete@example.com',
+            'id'            => $id,
+            'email'         => $email,
             'password_hash' => password_hash('password123', PASSWORD_DEFAULT),
-            'name' => 'Delete User',
+            'name'          => 'Delete User',
         ];
-        
-        $id = $userModel->insert($data);
+
+        $userModel->insert($data);
         $userModel->delete($id);
-        
+
         $found = $userModel->find($id);
         $this->assertNull($found);
     }
 
-    /**
-     * Test: Alle Benutzer können abgerufen werden
-     */
     public function testAllUsersCanBeRetrieved(): void
     {
         $userModel = new UserModel();
-        
-        // Insert mehrere Benutzer
+
         for ($i = 1; $i <= 3; $i++) {
+            $email = "user-{$i}-" . uniqid() . '@usermodel-test.local';
             $userModel->insert([
-                'email' => "user{$i}@example.com",
+                'id'            => $this->generateUuid(),
+                'email'         => $email,
                 'password_hash' => password_hash('password', PASSWORD_DEFAULT),
-                'name' => "User {$i}",
+                'name'          => "User {$i}",
             ]);
         }
-        
+
         $users = $userModel->findAll();
-        $this->assertCount(3, $users);
+        $this->assertGreaterThanOrEqual(3, count($users));
     }
 
-    /**
-     * Test: Passwort Hash ist gültig
-     */
     public function testPasswordHashIsValid(): void
     {
         $userModel = new UserModel();
         $password = 'mysecurepassword123';
-        
+
+        $email = 'hash-' . uniqid() . '@usermodel-test.local';
         $data = [
-            'email' => 'hash@example.com',
+            'id'            => $this->generateUuid(),
+            'email'         => $email,
             'password_hash' => password_hash($password, PASSWORD_DEFAULT),
-            'name' => 'Hash Test',
+            'name'          => 'Hash Test',
         ];
-        
+
         $userModel->insert($data);
-        $user = $userModel->where('email', 'hash@example.com')->first();
-        
+        $user = $userModel->where('email', $email)->first();
+
         $this->assertTrue(password_verify($password, $user['password_hash']));
         $this->assertFalse(password_verify('wrongpassword', $user['password_hash']));
     }

@@ -2,212 +2,92 @@
 
 namespace Tests\Unit\Controllers;
 
-use App\Controllers\Auth;
-use App\Models\UserModel;
 use CodeIgniter\Test\CIUnitTestCase;
-use CodeIgniter\Test\DatabaseTestTrait;
 use CodeIgniter\Test\FeatureTestTrait;
 
 /**
- * AuthControllerTest - Unit Tests für den Auth Controller
- * Testet Login, Registrierung und Logout Funktionalität
- * 
+ * AuthControllerTest - Feature tests for the Auth API controller
+ *
+ * Tests the JSON REST API endpoints through the full HTTP stack.
+ *
  * @internal
  */
 final class AuthControllerTest extends CIUnitTestCase
 {
-    use DatabaseTestTrait;
     use FeatureTestTrait;
 
-    protected $namespace = 'App\Controllers';
-
-    /**
-     * Test: Login Seite wird angezeigt
-     */
-    public function testLoginPageLoads(): void
+    protected function tearDown(): void
     {
-        $response = $this->get('/auth/login');
-        
-        $this->assertTrue($response->getStatusCode() === 200);
-        $this->assertStringContainsString('Todo App', (string)$response);
-        $this->assertStringContainsString('Anmelden', (string)$response);
+        $db = \Config\Database::connect();
+        $db->table('users')->where('email LIKE', '%@authctrl-test.local')->delete();
+        parent::tearDown();
     }
 
-    /**
-     * Test: Login mit gültigen Credentials
-     */
-    public function testLoginWithValidCredentials(): void
+    private function respStatus($response): int
     {
-        // Benutzer in der Datenbank erstellen
-        $userModel = new UserModel();
-        $userData = [
-            'email' => 'test@example.com',
-            'password_hash' => password_hash('password123', PASSWORD_DEFAULT),
-            'name' => 'Test User',
-        ];
-        $userModel->insert($userData);
-
-        // POST Request zum Login
-        $response = $this->post('/auth/attemptLogin', [
-            'email' => 'test@example.com',
-            'password' => 'password123',
-        ]);
-
-        // Sollte zu /dashboard weiterleiten
-        $this->assertTrue($response->getStatusCode() === 302);
+        return $response->response()->getStatusCode();
     }
 
-    /**
-     * Test: Login mit ungültigen Credentials
-     */
-    public function testLoginWithInvalidCredentials(): void
+    private function jsonDecode($response): ?array
     {
-        $response = $this->post('/auth/attemptLogin', [
-            'email' => 'nonexistent@example.com',
-            'password' => 'wrongpassword',
-        ]);
-
-        $this->assertTrue($response->getStatusCode() === 302);
+        $raw = $response->getJSON();
+        return $raw ? json_decode($raw, true) : null;
     }
 
-    /**
-     * Test: Registrierung mit gültigen Daten
-     */
-    public function testRegisterWithValidData(): void
+    public function testRegisterCreatesUserAndReturnsApiKey(): void
     {
-        $response = $this->post('/auth/attemptRegister', [
-            'name' => 'Neuer User',
-            'email' => 'newuser@example.com',
-            'password' => 'password123',
+        $email = 'apikey' . uniqid() . '@authctrl-test.local';
+        $response = $this->withBodyFormat('json')->post('/api/v1/auth/register', [
+            'name' => 'Controller Test', 'email' => $email, 'password' => 'password123',
         ]);
+        $body = $this->jsonDecode($response);
 
-        $this->assertTrue($response->getStatusCode() === 302);
-
-        $userModel = new UserModel();
-        $user = $userModel->where('email', 'newuser@example.com')->first();
-        
-        $this->assertNotNull($user);
-        $this->assertEquals('Neuer User', $user['name']);
-        $this->assertEquals('newuser@example.com', $user['email']);
+        $this->assertSame(201, $this->respStatus($response));
+        $this->assertTrue($body['success']);
+        $this->assertSame('Controller Test', $body['data']['user']['name']);
+        $this->assertSame($email, $body['data']['user']['email']);
+        $this->assertArrayNotHasKey('password_hash', $body['data']['user']);
     }
 
-    /**
-     * Test: Registrierung mit doppelter Email sollte fehlschlagen
-     */
-    public function testRegisterWithDuplicateEmail(): void
+    public function testRegisterWithWeakPasswordFails(): void
     {
-        $this->post('/auth/attemptRegister', [
-            'name' => 'User One',
-            'email' => 'duplicate@example.com',
-            'password' => 'password123',
+        $response = $this->withBodyFormat('json')->post('/api/v1/auth/register', [
+            'name' => 'Weak Pwd', 'email' => 'weak@authctrl-test.local', 'password' => '1234567',
         ]);
+        $body = $this->jsonDecode($response);
 
-        $response = $this->post('/auth/attemptRegister', [
-            'name' => 'User Two',
-            'email' => 'duplicate@example.com',
-            'password' => 'password456',
-        ]);
-
-        $this->assertTrue($response->getStatusCode() === 302);
+        $this->assertSame(422, $this->respStatus($response));
+        $this->assertFalse($body['success']);
     }
 
-    /**
-     * Test: Logout zerstört Session
-     */
-    public function testLogout(): void
+    public function testLoginReturnsExistingApiKey(): void
     {
-        $userModel = new UserModel();
-        $userData = [
-            'email' => 'logout@example.com',
-            'password_hash' => password_hash('password123', PASSWORD_DEFAULT),
-            'name' => 'Logout Test User',
-        ];
-        $userModel->insert($userData);
-
-        $this->post('/auth/attemptLogin', [
-            'email' => 'logout@example.com',
-            'password' => 'password123',
+        $email = 'existingkey' . uniqid() . '@authctrl-test.local';
+        $regResp = $this->withBodyFormat('json')->post('/api/v1/auth/register', [
+            'name' => 'Existing Key', 'email' => $email, 'password' => 'password123',
         ]);
+        $regBody = $this->jsonDecode($regResp);
+        $this->assertNotNull($regBody, 'Registration should succeed');
+        $originalKeyPrefix = $regBody['data']['key_prefix'];
 
-        $response = $this->get('/auth/logout');
-        $this->assertTrue($response->getStatusCode() === 302);
+        $loginResp = $this->withBodyFormat('json')->post('/api/v1/auth/login', [
+            'email' => $email, 'password' => 'password123',
+        ]);
+        $loginBody = $this->jsonDecode($loginResp);
+
+        $this->assertSame(200, $this->respStatus($loginResp));
+        $this->assertTrue($loginBody['success']);
+        $this->assertSame($originalKeyPrefix, $loginBody['data']['api_key_prefix']);
     }
 
-    /**
-     * Test: Passwort wird korrekt gehasht
-     */
-    public function testPasswordIsHashed(): void
+    public function testLoginWithInvalidEmailFormat(): void
     {
-        $password = 'plaintext_password_123';
-        $response = $this->post('/auth/attemptRegister', [
-            'name' => 'Hash Test',
-            'email' => 'hash@example.com',
-            'password' => $password,
+        $response = $this->withBodyFormat('json')->post('/api/v1/auth/login', [
+            'email' => 'not-an-email', 'password' => 'password123',
         ]);
+        $body = $this->jsonDecode($response);
 
-        $userModel = new UserModel();
-        $user = $userModel->where('email', 'hash@example.com')->first();
-
-        // Passwort sollte nicht im Klartext gespeichert sein
-        $this->assertNotEquals($password, $user['password_hash']);
-        
-        // password_verify sollte true zurückgeben
-        $this->assertTrue(password_verify($password, $user['password_hash']));
-    }
-
-    /**
-     * Test: Email ist erforderlich beim Login
-     */
-    public function testLoginRequiresEmail(): void
-    {
-        $response = $this->post('/auth/attemptLogin', [
-            'email' => '',
-            'password' => 'password123',
-        ]);
-
-        $this->assertTrue($response->getStatusCode() === 302);
-    }
-
-    /**
-     * Test: Email ist erforderlich bei Registrierung
-     */
-    public function testRegisterRequiresEmail(): void
-    {
-        $response = $this->post('/auth/attemptRegister', [
-            'name' => 'Test',
-            'email' => '',
-            'password' => 'password123',
-        ]);
-
-        $this->assertTrue($response->getStatusCode() === 302);
-    }
-
-    /**
-     * Test: Login mit ungültiger Email-Adresse
-     */
-    public function testLoginWithInvalidEmail(): void
-    {
-        $response = $this->post('/auth/attemptLogin', [
-            'email' => 'not-an-email',
-            'password' => 'password123',
-        ]);
-
-        $this->assertTrue($response->getStatusCode() === 302);
-    }
-
-    /**
-     * Test: Session wird nach erfolgreicher Registrierung gesetzt
-     */
-    public function testSessionIsSetAfterRegistration(): void
-    {
-        $response = $this->post('/auth/attemptRegister', [
-            'name' => 'Session Test',
-            'email' => 'session@example.com',
-            'password' => 'password123',
-        ]);
-
-        $userModel = new UserModel();
-        $user = $userModel->where('email', 'session@example.com')->first();
-        $this->assertNotNull($user);
+        $this->assertSame(422, $this->respStatus($response));
+        $this->assertFalse($body['success']);
     }
 }

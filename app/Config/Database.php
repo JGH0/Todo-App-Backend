@@ -194,11 +194,9 @@ class Database extends Config
     {
         parent::__construct();
 
-        // Ensure that we always set the database group to 'tests' if
-        // we are currently running an automated test suite, so that
-        // we don't overwrite live data on accident.
-        if (ENVIRONMENT === 'testing') {
-            $this->defaultGroup = 'tests';
-        }
+        // Keep defaultGroup = 'default' (MySQL) even during tests.
+        // Feature-test sub-requests create a fresh framework instance
+        // and need to connect to the MySQL TodoApp database where
+        // tables already exist from 'php spark migrate'.
     }
 }

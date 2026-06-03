@@ -45,9 +45,7 @@ class CategoryController extends BaseController
     {
         $userId = $this->getUserId();
 
-        if (!$this->validateWithModel($this->categoryModel)) {
-            return;
-        }
+        $__val = $this->validateWithModel($this->categoryModel); if ($__val !== true) { return $__val; }
 
         $json = $this->request->getJSON(true);
 

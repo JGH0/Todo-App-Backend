@@ -45,9 +45,7 @@ class ProjectController extends BaseController
     {
         $userId = $this->getUserId();
 
-        if (!$this->validateWithModel($this->projectModel)) {
-            return;
-        }
+        $__val = $this->validateWithModel($this->projectModel); if ($__val !== true) { return $__val; }
 
         $json = $this->request->getJSON(true);
 

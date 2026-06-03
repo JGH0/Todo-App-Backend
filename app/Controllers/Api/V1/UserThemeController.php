@@ -39,9 +39,7 @@ class UserThemeController extends BaseController
             'theme_id' => 'required',
         ];
 
-        if (!$this->validateRequest($rules)) {
-            return;
-        }
+        $__val = $this->validateRequest($rules); if ($__val !== true) { return $__val; }
 
         $data = [
             'id' => $this->generateUuid(),
