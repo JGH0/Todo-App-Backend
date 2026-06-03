@@ -37,8 +37,9 @@ services:
   # ── Backend (PHP / CodeIgniter API) ─────────────────────────────────────────
   backend:
     build:
-      context: ./docker/backend
-      dockerfile: Dockerfile
+      # Context is the project root – Dockerfile is at docker/backend/Dockerfile
+      context: .
+      dockerfile: docker/backend/Dockerfile
     container_name: todo-backend
     restart: unless-stopped
     # No external port needed – frontend nginx proxies /api/ internally.

@@ -1,0 +1,29 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# .dockerignore – excludes unnecessary files from Docker build context
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Local dependencies
+vendor/
+node_modules/
+
+# Build artifacts
+build/
+dist/
+.git/
+
+# Env & config (re-generated at container start)
+.env
+.env.example
+example.env
+env.example
+
+# Documentation (not needed in the image)
+*.md
+LICENSE
+
+# IDE / OS files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
