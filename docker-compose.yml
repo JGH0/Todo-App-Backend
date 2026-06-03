@@ -37,26 +37,18 @@ services:
   # ── Backend (PHP / CodeIgniter API) ─────────────────────────────────────────
   backend:
     build:
-      # Context is the project root – Dockerfile is at docker/backend/Dockerfile
       context: .
       dockerfile: docker/backend/Dockerfile
     container_name: todo-backend
     restart: unless-stopped
     # No external port needed – frontend nginx proxies /api/ internally.
-    # Uncomment for direct backend access (e.g. API testing):
-    # ports:
-    #   - "8082:80"
     environment:
-      # Database connection – the backend .env is auto-generated from these
       DB_HOSTNAME: db
       DB_DATABASE: TodoApp
       DB_USERNAME: root
       DB_PASSWORD: ""
       DB_PORT: "3306"
-      # Repo URL for auto-pull
       BACKEND_REPO: "https://github.com/JGH0/Todo-App-Backend.git"
-    # Code is baked into the image (cloned at build time).
-    # Entrypoint does git pull at container start for updates.
     depends_on:
       db:
         condition: service_healthy
@@ -67,10 +59,8 @@ services:
       context: ./docker/frontend
       dockerfile: Dockerfile
       args:
-        # Build-time: repo URL for cloning, API base for Vite build
         FRONTEND_REPO: "https://github.com/JGH0/Todo-App.git"
-        # Relative path – nginx proxies /api/ to the backend container.
-        # No CORS issues since frontend and API are on the same origin.
+        # Relative path – nginx proxies /api/ to backend. Same origin = no CORS.
         VITE_API_BASE_URL: "/api/v1"
     container_name: todo-frontend
     restart: unless-stopped
