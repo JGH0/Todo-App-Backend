@@ -41,9 +41,12 @@ services:
       dockerfile: docker/backend/Dockerfile
     container_name: todo-backend
     restart: unless-stopped
-    # Expose on 8080 – the Todo-App frontend hardcodes http://localhost:8080.
+    # Expose backend on host port 8082 (8080 in use).
+    # The Todo-App frontend calls http://localhost:8080 – this won't work from
+    # other machines. For remote access, configure your nginx proxy manager to
+    # also forward /api/ requests to http://<server-ip>:8082.
     ports:
-      - "8080:80"
+      - "8082:80"
     environment:
       DB_HOSTNAME: db
       DB_DATABASE: TodoApp
