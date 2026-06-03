@@ -77,24 +77,32 @@ class ApiAuthFilter implements FilterInterface
     /**
      * Return unauthorized response
      */
+    /**
+     * Add CORS headers to a response (needed for cross-origin browser requests).
+     */
+    private function withCors(ResponseInterface $response): ResponseInterface
+    {
+        return $response
+            ->setHeader('Access-Control-Allow-Origin', '*')
+            ->setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+            ->setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+    }
+
     private function unauthorized(string $message): ResponseInterface
     {
         $response = \Config\Services::response();
-        return $response->setStatusCode(401)->setJSON([
+        return $this->withCors($response->setStatusCode(401)->setJSON([
             'error' => 'Unauthorized',
             'message' => $message,
-        ]);
+        ]));
     }
 
-    /**
-     * Return forbidden response
-     */
     private function forbidden(string $message): ResponseInterface
     {
         $response = \Config\Services::response();
-        return $response->setStatusCode(403)->setJSON([
+        return $this->withCors($response->setStatusCode(403)->setJSON([
             'error' => 'Forbidden',
             'message' => $message,
-        ]);
+        ]));
     }
 }
