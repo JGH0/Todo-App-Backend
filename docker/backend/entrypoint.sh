@@ -1,37 +1,27 @@
 #!/bin/bash
 #
-# Backend entrypoint – pulls the Todo-App-Backend repo, installs deps,
-# writes the .env, runs migrations, then starts Apache in the foreground.
+# Backend entrypoint
+#   - Updates the code from GitHub (git pull)
+#   - Re-runs composer if composer.lock changed
+#   - Writes .env from environment variables
+#   - Waits for database
+#   - Runs migrations
+#   - Starts Apache in foreground
 #
 set -euo pipefail
 
-# Where the app lives inside the container
 APP_DIR="/var/www/app"
-APACHE_DOCROOT="${APP_DIR}/public"
-
-# ── 1. Clone / pull the repo ────────────────────────────────────────────────
-if [ -n "${BACKEND_REPO:-}" ]; then
-    echo "[backend] Cloning/pulling from ${BACKEND_REPO} ..."
-
-    if [ -d "${APP_DIR}/.git" ]; then
-        cd "${APP_DIR}"
-        git fetch --all
-        git reset --hard origin/main
-    else
-        rm -rf "${APP_DIR}" 2>/dev/null || true
-        git clone --depth 1 "${BACKEND_REPO}" "${APP_DIR}"
-    fi
-else
-    echo "[backend] BACKEND_REPO not set – using existing code in ${APP_DIR}"
-fi
 
 cd "${APP_DIR}"
 
-# ── 2. Composer install ──────────────────────────────────────────────────────
-if [ -f composer.json ]; then
-    echo "[backend] Installing Composer dependencies ..."
-    composer install --no-interaction --no-progress --prefer-dist || true
-fi
+# ── 1. Update code from GitHub ──────────────────────────────────────────────
+echo "[backend] Updating code from GitHub ..."
+git fetch --all 2>/dev/null || true
+git reset --hard origin/main 2>/dev/null || echo "[backend] No updates (staying on current HEAD)"
+
+# ── 2. Update Composer dependencies if needed ────────────────────────────────
+echo "[backend] Updating Composer dependencies ..."
+composer install --no-interaction --no-progress --prefer-dist
 
 # ── 3. Write .env from environment variables ─────────────────────────────────
 echo "[backend] Writing .env ..."
@@ -46,21 +36,21 @@ database.default.DBDriver = MySQLi
 database.default.port = ${DB_PORT:-3306}
 ENVEOF
 
-# ── 4. Wait for database and run migrations ──────────────────────────────────
+# ── 4. Wait for database ─────────────────────────────────────────────────────
 echo "[backend] Waiting for database ..."
 for i in $(seq 1 30); do
     if php -r "
         try {
-            \\\$conn = new mysqli(
+            \$conn = new mysqli(
                 getenv('DB_HOSTNAME') ?: 'db',
                 getenv('DB_USERNAME') ?: 'root',
                 getenv('DB_PASSWORD') ?: '',
                 '',
                 (int)(getenv('DB_PORT') ?: 3306)
             );
-            echo \\\$conn->ping() ? 'ok' : 'fail';
-            \\\$conn->close();
-        } catch (\\\Exception \\\$e) { echo 'fail'; }
+            echo \$conn->ping() ? 'ok' : 'fail';
+            \$conn->close();
+        } catch (\Exception \$e) { echo 'fail'; }
     " 2>/dev/null | grep -q ok; then
         echo "[backend] Database is ready."
         break
@@ -69,12 +59,13 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
+# ── 5. Run migrations ────────────────────────────────────────────────────────
 echo "[backend] Running migrations ..."
-php spark migrate --no-interaction 2>&1 || echo "[backend] Migrations already applied or skipped."
+php spark migrate --no-interaction 2>&1 || echo "[backend] Migrations already applied."
 
-# ── 5. Fix storage permissions ───────────────────────────────────────────────
+# ── 6. Fix storage permissions ───────────────────────────────────────────────
 chown -R www-data:www-data writable/ 2>/dev/null || true
 
-# ── 6. Start Apache in foreground ────────────────────────────────────────────
+# ── 7. Start Apache in foreground ────────────────────────────────────────────
 echo "[backend] Starting Apache on port 80 ..."
 exec apache2-foreground

@@ -41,8 +41,10 @@ services:
       dockerfile: Dockerfile
     container_name: todo-backend
     restart: unless-stopped
-    ports:
-      - "8082:80"
+    # No external port needed – frontend nginx proxies /api/ internally.
+    # Uncomment for direct backend access (e.g. API testing):
+    # ports:
+    #   - "8082:80"
     environment:
       # Database connection – the backend .env is auto-generated from these
       DB_HOSTNAME: db
@@ -52,8 +54,8 @@ services:
       DB_PORT: "3306"
       # Repo URL for auto-pull
       BACKEND_REPO: "https://github.com/JGH0/Todo-App-Backend.git"
-    volumes:
-      - backend_code:/var/www/app
+    # Code is baked into the image (cloned at build time).
+    # Entrypoint does git pull at container start for updates.
     depends_on:
       db:
         condition: service_healthy
@@ -66,7 +68,9 @@ services:
       args:
         # Build-time: repo URL for cloning, API base for Vite build
         FRONTEND_REPO: "https://github.com/JGH0/Todo-App.git"
-        VITE_API_BASE_URL: "http://localhost:8082"
+        # Relative path – nginx proxies /api/ to the backend container.
+        # No CORS issues since frontend and API are on the same origin.
+        VITE_API_BASE_URL: "/api/v1"
     container_name: todo-frontend
     restart: unless-stopped
     ports:
@@ -76,4 +80,3 @@ services:
 
 volumes:
   db_data:
-  backend_code:
