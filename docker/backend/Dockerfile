@@ -37,11 +37,10 @@ COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 WORKDIR /var/www/app
 COPY . .
 
-# ── Install PHP dependencies ─────────────────────────────────────────────────
-RUN composer install --no-interaction --no-progress --prefer-dist \
-    && rm -rf /var/www/.composer/cache
-
 # ── Entrypoint ───────────────────────────────────────────────────────────────
+# NOTE: composer install runs at CONTAINER START (in entrypoint.sh), not at
+# build time. Packagist.org may be unreachable during Docker builds in
+# Portainer/CI environments. Runtime has full network access.
 COPY docker/backend/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
