@@ -20,10 +20,12 @@ WORKDIR /build
 RUN git clone --depth 1 "${FRONTEND_REPO}" .
 
 # ── Force the API base URL ──────────────────────────────────────────────────
-# The repo might have its own .env with VITE_API_BASE_URL=http://localhost:8080
-# which overrides environment variables. Overwrite it here.
-RUN echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" > .env
-RUN echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" > .env.production
+# The repo might have .env, .env.production, .env.local etc. with the old
+# http://localhost:8080 hardcoded. Delete any existing .env files, then
+# write only the one we want before building.
+RUN rm -f .env .env.* && \
+    echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" > .env && \
+    echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" > .env.production
 
 # Install & build
 RUN npm ci && npm run build

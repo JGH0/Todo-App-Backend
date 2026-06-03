@@ -41,7 +41,9 @@ services:
       dockerfile: docker/backend/Dockerfile
     container_name: todo-backend
     restart: unless-stopped
-    # No external port needed – frontend nginx proxies /api/ internally.
+    # Expose on 8080 – the Todo-App frontend hardcodes http://localhost:8080.
+    ports:
+      - "8080:80"
     environment:
       DB_HOSTNAME: db
       DB_DATABASE: TodoApp
