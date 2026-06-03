@@ -129,23 +129,15 @@ class AuthController extends BaseController
                 return $this->errorResponse('Invalid email or password', 401);
             }
 
-            // Check if user has an existing active API key
-            $existingKey = $this->apiAuthKeyModel
+            // Revoke any existing active keys and create a fresh one.
+            // The raw key is SHA-256 hashed in the DB and can't be retrieved,
+            // so we always issue a new key on login.
+            $existingKeys = $this->apiAuthKeyModel
                 ->where('user_id', $user['id'])
                 ->where('is_active', true)
-                ->first();
-
-            if ($existingKey) {
-                // Return existing key
-                return $this->successResponse([
-                    'user' => [
-                        'id' => $user['id'],
-                        'email' => $user['email'],
-                        'name' => $user['name'],
-                    ],
-                    'api_key_prefix' => $existingKey['key_prefix'],
-                    'message' => 'Using existing API key',
-                ], 'Login successful');
+                ->findAll();
+            foreach ($existingKeys as $oldKey) {
+                $this->apiAuthKeyModel->revokeKey($oldKey['id']);
             }
 
             // Create new API key
