@@ -22,10 +22,7 @@ class TodoModel extends Model
     protected $updatedField  = 'updated_at';
 
     protected $validationRules = [
-        'user_id' => [
-            'rules' => 'required',
-            'errors' => ['required' => 'User ID is required.'],
-        ],
+        // user_id is set by the controller from auth context, not the request body
         'title' => [
             'rules' => 'required|max_length[255]',
             'errors' => [

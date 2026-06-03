@@ -20,10 +20,7 @@ class ProjectModel extends Model
     protected $updatedField  = '';
 
     protected $validationRules = [
-        'user_id' => [
-            'rules' => 'required',
-            'errors' => ['required' => 'User ID is required.'],
-        ],
+        // user_id is set by the controller from auth context, not the request body
         'name' => [
             'rules' => 'required|max_length[255]',
             'errors' => [
