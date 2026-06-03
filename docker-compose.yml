@@ -42,7 +42,7 @@ services:
     container_name: todo-backend
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "8081:80"
     environment:
       # Database connection – the backend .env is auto-generated from these
       DB_HOSTNAME: db
@@ -66,7 +66,7 @@ services:
       args:
         # Build-time: repo URL for cloning, API base for Vite build
         FRONTEND_REPO: "https://github.com/JGH0/Todo-App.git"
-        VITE_API_BASE_URL: "http://localhost:8080"
+        VITE_API_BASE_URL: "http://localhost:8081"
     container_name: todo-frontend
     restart: unless-stopped
     ports:
