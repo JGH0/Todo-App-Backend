@@ -15,11 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         unzip \
         libzip-dev \
+        libicu-dev \
         mariadb-client \
     && rm -rf /var/lib/apt/lists/*
 
 # ── PHP extensions ───────────────────────────────────────────────────────────
-RUN docker-php-ext-install mysqli pdo pdo_mysql zip
+RUN docker-php-ext-install mysqli pdo pdo_mysql zip intl
 
 # ── Apache modules ───────────────────────────────────────────────────────────
 RUN a2enmod rewrite

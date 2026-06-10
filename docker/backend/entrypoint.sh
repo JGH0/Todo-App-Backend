@@ -17,7 +17,8 @@ cd "${APP_DIR}"
 # ── 1. Update code from GitHub ──────────────────────────────────────────────
 echo "[backend] Updating code from GitHub ..."
 git fetch --all 2>/dev/null || true
-git reset --hard origin/main 2>/dev/null || echo "[backend] No updates (staying on current HEAD)"
+# Try fast-forward merge; if local has unpushed commits, stay on current HEAD
+git merge --ff-only origin/main 2>/dev/null || echo "[backend] Staying on current HEAD (local changes ahead of remote)"
 
 # ── 2. Update Composer dependencies if needed ────────────────────────────────
 echo "[backend] Updating Composer dependencies ..."
