@@ -115,3 +115,4 @@ $routes->options('/themes/upload', static function () {
     return response()->setStatusCode(204);
 });
 $routes->get('/themes/preview/(:segment)', 'ThemeStore::preview/$1');
+$routes->get('/themes/(:segment).css', 'ThemeStore::serveCss/$1');
