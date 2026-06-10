@@ -33,6 +33,14 @@ class AiProvidersSeeder extends Seeder
                 'is_builtin' => true,
                 'created_at' => date('Y-m-d H:i:s'),
             ],
+            [
+                'id' => '550e8400-e29b-41d4-a716-446655440004',
+                'name' => 'deepseek',
+                'display_name' => 'DeepSeek',
+                'base_url' => 'https://api.deepseek.com',
+                'is_builtin' => true,
+                'created_at' => date('Y-m-d H:i:s'),
+            ],
         ];
 
         $this->db->table('ai_providers')->insertBatch($data);
