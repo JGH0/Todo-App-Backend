@@ -66,12 +66,12 @@ php spark migrate --no-interaction 2>&1 || echo "[backend] Migrations already ap
 
 # ── 5b. Seed default marketplace themes (only if table is empty) ──────────────
 echo "[backend] Seeding default marketplace themes ..."
-THEME_COUNT=$(php -r "try { \$db = \\Config\\Database::connect(); echo \$db->table('marketplace_themes')->countAllResults(); } catch (\Exception \\$e) { echo '0'; }" 2>/dev/null || echo "0")
-if [ "$THEME_COUNT" = "0" ]; then
-	php spark db:seed MarketplaceThemesSeeder --no-interaction 2>&1 || echo "[backend] Seeder failed or already run."
-else
-	echo "[backend] Marketplace themes already seeded ($THEME_COUNT themes found)."
-fi
+	php docker/backend/seed_check.php 2>/dev/null
+	if [ "$?" = "0" ]; then
+		php spark db:seed MarketplaceThemesSeeder --no-interaction 2>&1 || echo "[backend] Seeder failed or already run."
+	else
+		echo "[backend] Marketplace themes already seeded."
+	fi
 
 # ── 6. Fix storage permissions ───────────────────────────────────────────────
 chown -R www-data:www-data writable/ 2>/dev/null || true
