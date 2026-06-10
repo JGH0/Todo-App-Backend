@@ -63,12 +63,12 @@ services:
     build:
       context: ./docker/frontend
       dockerfile: Dockerfile
-      args:
-        FRONTEND_REPO: "https://github.com/JGH0/Todo-App.git"
-        # Relative path – nginx proxies /api/ to backend. Same origin = no CORS.
-        VITE_API_BASE_URL: "/api/v1"
     container_name: todo-frontend
     restart: unless-stopped
+    environment:
+      FRONTEND_REPO: "https://github.com/JGH0/Todo-App.git"
+      # Relative path – nginx proxies /api/ to backend. Same origin = no CORS.
+      VITE_API_BASE_URL: "/api/v1"
     ports:
       - "3000:80"
     depends_on:
