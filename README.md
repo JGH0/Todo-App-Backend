@@ -4,10 +4,13 @@ A RESTful API backend for a todo application built with **CodeIgniter 4**.
 Supports user authentication (API key + JWT), CRUD for todos/categories/projects,
 recurring tasks, activity logging, and a theme marketplace.
 
+**This is the backend API.** It powers the [Todo-App](https://github.com/JGH0/Todo-App) frontend SPA.
+
 ---
 
 ## Table of Contents
 
+- [Self-Hosting with Docker](#self-hosting-with-docker-recommended)
 - [Quick Start](#quick-start)
 - [API Documentation](#api-documentation)
 - [Authentication](#authentication)
@@ -20,7 +23,86 @@ recurring tasks, activity logging, and a theme marketplace.
 
 ---
 
-## Quick Start
+## Self-Hosting with Docker (Recommended)
+
+The entire stack (frontend + backend + database) runs via Docker Compose
+from this repository.
+
+### Quick Start
+
+```bash
+# 1. Clone this repo
+cd Todo-App-Backend
+
+# 2. Start the full stack
+docker compose up -d
+
+# 3. Open the app
+#    Frontend: http://localhost:3000
+#    Backend:  http://localhost:8080
+#    API:      http://localhost:3000/api/v1
+```
+
+### Services
+
+| Container | Image | Purpose |
+|-----------|-------|---------|
+| `todo-frontend` | Built from `docker/frontend/Dockerfile` | Nginx serving the [Todo-App](https://github.com/JGH0/Todo-App) SPA, proxies `/api/` to backend |
+| `todo-backend` | Built from `docker/backend/Dockerfile` | PHP 8.2 + Apache running the CodeIgniter REST API |
+| `todo-db` | `mariadb:11` | MariaDB database (persistent volume) |
+
+### How It Works
+
+**Frontend:** At container start, clones the latest [Todo-App](https://github.com/JGH0/Todo-App) repo,
+installs dependencies, builds the SPA, and starts nginx. Every restart pulls
+fresh code — no image rebuild needed.
+
+**Backend:** At container start, does a `git fetch && git merge --ff-only` to
+pull the latest backend code, runs composer install, waits for the database,
+applies migrations, and seeds default marketplace themes.
+
+**Networking:** The frontend nginx proxies `/api/` and `/themes` requests to
+the backend container. Everything stays on the same origin (`localhost:3000`)
+so there are no CORS issues.
+
+### Portainer Deployment
+
+1. Add this repo as a **Stack** in Portainer
+2. Deploy — Portainer builds and starts all three services
+3. To update: restart the containers (frontend and backend both pull fresh
+   code from GitHub at startup)
+
+### Environment Variables
+
+| Variable | Default | Service | Description |
+|----------|---------|---------|-------------|
+| `FRONTEND_REPO` | `https://github.com/JGH0/Todo-App.git` | frontend | Git repo to clone at startup |
+| `VITE_API_BASE_URL` | `/api/v1` | frontend | Backend API path (proxied through nginx) |
+| `BACKEND_REPO` | `https://github.com/JGH0/Todo-App-Backend.git` | backend | Git repo reference (for entrypoint) |
+| `DB_HOSTNAME` | `db` | backend | Database hostname |
+| `DB_DATABASE` | `TodoApp` | backend | Database name |
+| `DB_USERNAME` | `root` | backend | Database user |
+| `DB_PASSWORD` | `` | backend | Database password |
+| `DB_PORT` | `3306` | backend | Database port |
+
+### Default Themes
+
+The backend ships with 6 built-in themes (seeded automatically on first start):
+
+| Theme | Style |
+|-------|-------|
+| Ocean Breeze | Light, blue, calm |
+| Midnight Void | Dark, purple, neon |
+| Forest Grove | Light, green, earthy |
+| Sunset Ember | Warm, orange, vibrant |
+| Arctic Frost | Light, minimal, clean |
+| Obsidian Rose | Dark, elegant, rose gold |
+
+These are served via the theme browser in the frontend app.
+
+---
+
+## Quick Start (Standalone)
 
 ### Requirements
 
