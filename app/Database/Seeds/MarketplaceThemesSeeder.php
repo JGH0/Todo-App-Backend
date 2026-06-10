@@ -8,9 +8,12 @@ class MarketplaceThemesSeeder extends Seeder
 {
     public function run()
     {
-        $this->db->query('SET FOREIGN_KEY_CHECKS=0');
-        $this->db->table('marketplace_themes')->truncate();
-        $this->db->query('SET FOREIGN_KEY_CHECKS=1');
+        // Only seed if table is empty
+        $count = $this->db->table('marketplace_themes')->countAllResults();
+        if ($count > 0) {
+            echo "Marketplace themes already seeded ({$count} themes found).\n";
+            return;
+        }
 
         $data = [
             [
